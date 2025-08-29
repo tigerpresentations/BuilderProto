@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GLB Scene Editor</title>
+    <title>GLB Scene Editor - High Resolution</title>
     <style>
         body { margin: 0; font-family: monospace; overflow: hidden; }
         #drop-zone { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; 
@@ -18,7 +18,6 @@
         #canvas-editor { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8);
                          padding: 15px; border-radius: 5px; color: white; display: none; }
         #drawing-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
-        #quality-selector { margin: 5px 0; }
         .quality-info { font-size: 10px; color: #888; margin-top: 5px; }
         #canvas-controls { margin-top: 10px; }
         input[type="color"] { width: 40px; height: 25px; margin: 5px; }
@@ -27,7 +26,9 @@
         .control-group { margin: 10px 0; }
         .control-group label { display: block; font-size: 11px; margin-bottom: 3px; }
         input[type="range"] { width: 100%; }
+        input[type="checkbox"] { margin-right: 8px; }
         #status { margin-top: 10px; font-size: 12px; color: #0f0; }
+        #performance-info { font-size: 10px; color: #888; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -37,10 +38,11 @@
         <h3>GLB Scene Editor</h3>
         <div class="control-group">
             <label>Background Color:</label>
-            <input type="color" id="bg-color" value="#1a1a1a">
+            <input type="color" id="bg-color" value="#cccccc">
         </div>
         <button id="clear-model-btn" style="display:none;">Remove Model</button>
         <div id="status">Drop a GLB file to begin</div>
+        <div id="performance-info">Performance: Ready</div>
         
         <div id="model-controls">
             <h4>Model Controls</h4>
@@ -58,21 +60,18 @@
                 <label>Rotation Y: <span id="rot-y-val">0°</span></label>
                 <input type="range" id="rot-y" min="0" max="360" step="5" value="0">
             </div>
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="backlight-toggle"> Backlight
+                </label>
+            </div>
             <button id="toggle-canvas-btn">Show Canvas Editor</button>
         </div>
     </div>
     
     <div id="canvas-editor">
-        <h4>Texture Editor</h4>
-        <div id="quality-selector">
-            <label>Quality:</label>
-            <select id="texture-quality">
-                <option value="512">High (512x512)</option>
-                <option value="256" selected>Standard (256x256)</option>
-                <option value="128">Low (128x128)</option>
-            </select>
-        </div>
-        <canvas id="drawing-canvas" width="256" height="256"></canvas>
+        <h4>High-Resolution Texture Editor</h4>
+        <canvas id="drawing-canvas" width="1024" height="1024"></canvas>
         <div id="canvas-controls">
             <input type="color" id="brush-color" value="#ff0000" title="Brush Color">
             <input type="file" id="image-upload" accept="image/*" title="Upload Image">
@@ -82,7 +81,7 @@
         <div style="font-size: 11px; color: #aaa; margin-top: 10px;">
             Draw or upload images to texture "Image" materials
         </div>
-        <div class="quality-info" id="quality-info">Current: 256x256 (~256KB memory)</div>
+        <div class="quality-info" id="quality-info">Resolution: 1024x1024 (High Quality)</div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -91,7 +90,7 @@
     <script>
         // Scene setup
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a1a);
+        scene.background = new THREE.Color(0xcccccc);
         
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(5, 5, 5);
@@ -106,7 +105,7 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.maxPolarAngle = Math.PI * 0.8; // Prevent viewing from underground
+        controls.maxPolarAngle = Math.PI * 0.8;
         
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -137,25 +136,57 @@
         let imageMaterials = [];
         let canvasTexture = null;
         
-        // Enhanced canvas texture setup with quality control
+        // High-resolution canvas setup optimized for 1024x1024
         const canvas = document.getElementById('drawing-canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', {
+            alpha: false,  // Better performance for opaque textures
+            desynchronized: true,  // Reduce input lag
+            willReadFrequently: false  // Optimize for drawing
+        });
         let isDrawing = false;
-        let currentQuality = 256;
-        let performanceMonitor = { frameCount: 0, lastTime: performance.now(), averageFPS: 60 };
+        let targetQuality = 1024;
+        let currentQuality = 1024;
+        let lastTextureUpdate = 0;
+        const UPDATE_THROTTLE = 16; // Max 60fps texture updates
         
-        // Device capability detection
+        // Performance monitoring
+        let performanceMonitor = { 
+            frameCount: 0, 
+            lastTime: performance.now(), 
+            averageFPS: 60,
+            samples: []
+        };
+        
+        // Advanced device capability detection
         function detectDeviceCapabilities() {
             const gl = renderer.getContext();
             const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
             const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            const memoryInfo = performance.memory;
+            const hardwareConcurrency = navigator.hardwareConcurrency || 4;
+            
+            // Estimate GPU capabilities
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer_info = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown';
+            
+            // Conservative memory estimation
+            let estimatedVRAM = 512;
+            if (renderer_info.includes('GeForce') || renderer_info.includes('Radeon')) {
+                estimatedVRAM = 2048;
+            } else if (renderer_info.includes('Intel') && !isMobile) {
+                estimatedVRAM = 1024;
+            }
+            
+            // Determine if device can handle 1024x1024
+            const canHandle1024 = !isMobile && maxTextureSize >= 2048 && estimatedVRAM >= 1024 && hardwareConcurrency >= 4;
             
             return {
                 maxTextureSize,
                 isMobile,
-                estimatedMemory: memoryInfo ? memoryInfo.totalJSHeapSize : null,
-                recommendedQuality: isMobile ? 256 : (maxTextureSize >= 2048 ? 512 : 256)
+                hardwareConcurrency,
+                estimatedVRAM,
+                renderer: renderer_info,
+                canHandle1024,
+                optimalQuality: canHandle1024 ? 1024 : (isMobile ? 256 : 512)
             };
         }
         
@@ -163,35 +194,52 @@
             currentQuality = size;
             canvas.width = size;
             canvas.height = size;
-            canvas.style.width = '256px';
+            canvas.style.width = '256px';  // Display size stays consistent
             canvas.style.height = '256px';
             
-            // Reinitialize canvas context
+            // Optimized canvas initialization
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, size, size);
-            ctx.lineWidth = Math.max(2, size / 128); // Scale brush with resolution
+            ctx.lineWidth = Math.max(4, size / 170); // Optimal brush scaling
             ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
             
-            // Update quality info
-            const memoryEstimate = ((size * size * 4) / 1024).toFixed(0);
+            // Enhanced drawing settings
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            // Update info display
+            const memoryEstimate = ((size * size * 3) / 1024).toFixed(0); // RGB format
             document.getElementById('quality-info').textContent = 
-                `Current: ${size}x${size} (~${memoryEstimate}KB memory)`;
+                `Resolution: ${size}x${size} (${memoryEstimate}KB)`;
         }
         
         function createCanvasTexture() {
             if (canvasTexture) canvasTexture.dispose();
             canvasTexture = new THREE.CanvasTexture(canvas);
             
-            // Optimized settings for high-resolution textures
+            // Aggressive optimization for high-resolution
+            canvasTexture.format = THREE.RGBFormat; // Save 25% memory
             canvasTexture.flipY = false;
             canvasTexture.magFilter = THREE.LinearFilter;
             canvasTexture.minFilter = THREE.LinearFilter;
-            canvasTexture.generateMipmaps = false; // Critical for performance
+            canvasTexture.generateMipmaps = false; // Critical performance save
             canvasTexture.wrapS = THREE.ClampToEdgeWrapping;
             canvasTexture.wrapT = THREE.ClampToEdgeWrapping;
+            canvasTexture.unpackAlignment = 1;
             canvasTexture.needsUpdate = true;
             
             return canvasTexture;
+        }
+        
+        function throttledTextureUpdate() {
+            const now = performance.now();
+            if (now - lastTextureUpdate > UPDATE_THROTTLE) {
+                if (canvasTexture) {
+                    canvasTexture.needsUpdate = true;
+                }
+                lastTextureUpdate = now;
+            }
         }
         
         function updatePerformanceMonitor() {
@@ -199,23 +247,57 @@
             const currentTime = performance.now();
             
             if (currentTime >= performanceMonitor.lastTime + 1000) {
-                performanceMonitor.averageFPS = Math.round(
+                const fps = Math.round(
                     (performanceMonitor.frameCount * 1000) / (currentTime - performanceMonitor.lastTime)
                 );
+                performanceMonitor.averageFPS = fps;
                 performanceMonitor.frameCount = 0;
                 performanceMonitor.lastTime = currentTime;
                 
-                // Auto-scale quality if performance drops
-                if (performanceMonitor.averageFPS < 45 && currentQuality > 256) {
-                    console.warn('Performance drop detected, reducing texture quality');
-                    document.getElementById('texture-quality').value = '256';
-                    changeTextureQuality(256);
+                // Update performance display
+                document.getElementById('performance-info').textContent = 
+                    `Performance: ${fps} FPS (${currentQuality}x${currentQuality})`;
+                
+                // Auto-fallback if severe performance issues
+                if (fps < 30 && currentQuality > 512) {
+                    console.warn('Performance critical, reducing to 512x512');
+                    fallbackToLowerQuality(512);
+                } else if (fps < 20 && currentQuality > 256) {
+                    console.warn('Performance critical, reducing to 256x256');
+                    fallbackToLowerQuality(256);
                 }
             }
         }
         
+        function fallbackToLowerQuality(newQuality) {
+            if (newQuality >= currentQuality) return;
+            
+            console.log(`Auto-scaling from ${currentQuality}x${currentQuality} to ${newQuality}x${newQuality}`);
+            
+            const previousImageData = ctx.getImageData(0, 0, currentQuality, currentQuality);
+            initializeCanvas(newQuality);
+            
+            // Scale and preserve content
+            if (previousImageData) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = previousImageData.width;
+                tempCanvas.height = previousImageData.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.putImageData(previousImageData, 0, 0);
+                
+                ctx.drawImage(tempCanvas, 0, 0, currentQuality, currentQuality);
+            }
+            
+            createCanvasTexture();
+            
+            // Update all materials
+            imageMaterials.forEach(material => {
+                material.map = canvasTexture;
+                material.needsUpdate = true;
+            });
+        }
+        
         function placeModelOnFloor(model) {
-            // Clear previous model
             if (currentModel) {
                 cleanupModel(currentModel);
                 scene.remove(currentModel);
@@ -224,13 +306,13 @@
             currentModel = model;
             scene.add(model);
             
-            // Calculate bounding box for floor placement
+            // Calculate bounding box for placement
             model.updateMatrixWorld(true);
             const box = new THREE.Box3().setFromObject(model);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             
-            // Center the model horizontally and place on floor
+            // Center and place on floor
             model.position.x = -center.x;
             model.position.z = -center.z;
             model.position.y = -box.min.y;
@@ -242,15 +324,20 @@
                 model.scale.setScalar(scale);
             }
             
-            // Find and store "Image" materials
+            // Find and apply textures to "Image" materials
             imageMaterials = [];
             model.traverse((child) => {
                 if (child.isMesh && child.material) {
                     const matName = child.material.name || '';
                     if (matName.toLowerCase().includes('image')) {
                         imageMaterials.push(child.material);
-                        // Apply canvas texture
-                        child.material.map = createCanvasTexture();
+                        child.material.map = canvasTexture;
+                        
+                        // Initialize backlight properties
+                        child.material.emissive = new THREE.Color(0x000000);
+                        child.material.emissiveIntensity = 0.0;
+                        child.material.emissiveMap = null;
+                        
                         child.material.needsUpdate = true;
                     }
                     child.castShadow = true;
@@ -258,17 +345,18 @@
                 }
             });
             
+            // Reset backlight toggle
+            document.getElementById('backlight-toggle').checked = false;
+            
             // Update UI
             document.getElementById('clear-model-btn').style.display = 'block';
             document.getElementById('model-controls').style.display = 'block';
-            const capabilities = detectDeviceCapabilities();
             document.getElementById('status').textContent = 
-                `Loaded model (${imageMaterials.length} Image materials found) - ${capabilities.isMobile ? 'Mobile' : 'Desktop'} detected`;
+                `Loaded model (${imageMaterials.length} Image materials found)`;
             
-            // Reset sliders to current values
             updateSliders();
             
-            // Focus camera on model
+            // Focus camera
             const modelCenter = new THREE.Vector3();
             box.getCenter(modelCenter);
             modelCenter.y = size.y * 0.5;
@@ -311,7 +399,7 @@
             document.getElementById('rot-y-val').textContent = Math.round(currentModel.rotation.y * 180 / Math.PI) + '°';
         }
         
-        // Drag and drop handling
+        // Drag and drop
         const dropZone = document.getElementById('drop-zone');
         
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -343,7 +431,7 @@
             reader.readAsArrayBuffer(file);
         }
         
-        // Canvas drawing
+        // Canvas drawing events
         canvas.addEventListener('pointerdown', (e) => {
             isDrawing = true;
             ctx.strokeStyle = document.getElementById('brush-color').value;
@@ -355,26 +443,21 @@
             if (!isDrawing) return;
             ctx.lineTo(e.offsetX, e.offsetY);
             ctx.stroke();
-            
-            if (canvasTexture) {
-                canvasTexture.needsUpdate = true;
-            }
+            throttledTextureUpdate();
         });
         
         canvas.addEventListener('pointerup', () => isDrawing = false);
         canvas.addEventListener('pointerleave', () => isDrawing = false);
         
-        // Image upload to canvas
+        // Image upload
         document.getElementById('image-upload').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
                 const img = new Image();
                 img.onload = () => {
-                    // Clear canvas and draw image
                     ctx.fillStyle = 'white';
                     ctx.fillRect(0, 0, currentQuality, currentQuality);
                     
-                    // Scale image to fit canvas
                     const scale = Math.min(currentQuality / img.width, currentQuality / img.height);
                     const width = img.width * scale;
                     const height = img.height * scale;
@@ -382,10 +465,7 @@
                     const y = (currentQuality - height) / 2;
                     
                     ctx.drawImage(img, x, y, width, height);
-                    
-                    if (canvasTexture) {
-                        canvasTexture.needsUpdate = true;
-                    }
+                    throttledTextureUpdate();
                 };
                 img.src = URL.createObjectURL(file);
             }
@@ -405,49 +485,22 @@
                 
                 document.getElementById('clear-model-btn').style.display = 'none';
                 document.getElementById('model-controls').style.display = 'none';
+                document.getElementById('backlight-toggle').checked = false;
                 document.getElementById('status').textContent = 'Drop a GLB file to begin';
                 dropZone.classList.remove('hidden');
             }
         });
         
-        function changeTextureQuality(newQuality) {
-            const previousImageData = ctx.getImageData(0, 0, currentQuality, currentQuality);
-            initializeCanvas(newQuality);
-            
-            // Scale and redraw previous content
-            if (previousImageData) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = previousImageData.width;
-                tempCanvas.height = previousImageData.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.putImageData(previousImageData, 0, 0);
-                
-                ctx.drawImage(tempCanvas, 0, 0, currentQuality, currentQuality);
-            }
-            
-            // Recreate texture with new size
-            createCanvasTexture();
-            
-            // Update all materials using this texture
-            imageMaterials.forEach(material => {
-                material.map = canvasTexture;
-                material.needsUpdate = true;
-            });
-        }
-        
-        document.getElementById('texture-quality').addEventListener('change', (e) => {
-            changeTextureQuality(parseInt(e.target.value));
-        });
-        
         document.getElementById('clear-canvas-btn').addEventListener('click', () => {
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, currentQuality, currentQuality);
-            if (canvasTexture) canvasTexture.needsUpdate = true;
+            throttledTextureUpdate();
         });
         
         document.getElementById('toggle-canvas-btn').addEventListener('click', () => {
             const editor = document.getElementById('canvas-editor');
-            editor.style.display = editor.style.display === 'none' ? 'block' : 'none';
+            const isHidden = editor.style.display === 'none' || window.getComputedStyle(editor).display === 'none';
+            editor.style.display = isHidden ? 'block' : 'none';
         });
         
         document.getElementById('hide-canvas-btn').addEventListener('click', () => {
@@ -480,6 +533,26 @@
             }
         });
         
+        // Backlight toggle
+        document.getElementById('backlight-toggle').addEventListener('change', (e) => {
+            const backlightEnabled = e.target.checked;
+            
+            imageMaterials.forEach(material => {
+                if (backlightEnabled) {
+                    // Enable backlight glow effect
+                    material.emissive = new THREE.Color(0xffffff);
+                    material.emissiveIntensity = 0.3;
+                    material.emissiveMap = canvasTexture; // Use same texture for glow
+                } else {
+                    // Disable backlight
+                    material.emissive = new THREE.Color(0x000000);
+                    material.emissiveIntensity = 0.0;
+                    material.emissiveMap = null;
+                }
+                material.needsUpdate = true;
+            });
+        });
+        
         // Animation loop with performance monitoring
         function animate() {
             requestAnimationFrame(animate);
@@ -495,19 +568,29 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
         
-        // Initialize with device-appropriate settings
+        // Initialize with device-optimized settings
         const capabilities = detectDeviceCapabilities();
+        console.log('Device capabilities:', capabilities);
         
-        // Set recommended quality based on device
-        if (capabilities.recommendedQuality !== 256) {
-            document.getElementById('texture-quality').value = capabilities.recommendedQuality.toString();
-        }
+        // Target 1024x1024 but fallback if needed
+        targetQuality = capabilities.canHandle1024 ? 1024 : capabilities.optimalQuality;
         
-        initializeCanvas(capabilities.recommendedQuality);
+        console.log(`Initializing with ${targetQuality}x${targetQuality} canvas texture`);
+        
+        initializeCanvas(targetQuality);
         createCanvasTexture();
         animate();
         
-        console.log('Device capabilities:', capabilities);
+        // Memory monitoring
+        if (performance.memory) {
+            setInterval(() => {
+                const memUsed = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
+                const memLimit = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(1);
+                if (memUsed > memLimit * 0.85) {
+                    console.warn(`High memory usage: ${memUsed}MB / ${memLimit}MB`);
+                }
+            }, 10000);
+        }
     </script>
 </body>
 </html>
