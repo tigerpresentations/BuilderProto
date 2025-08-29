@@ -11,14 +11,17 @@
         #drop-zone.dragging { background: rgba(0,100,0,0.9); }
         #drop-zone.hidden { display: none; }
         #controls { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); 
-                    padding: 15px; border-radius: 5px; color: white; min-width: 250px; }
+                    padding: 15px; border-radius: 5px; color: white; min-width: 250px;
+                    max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
         button { margin: 5px; padding: 8px 12px; cursor: pointer; background: #4a90e2; 
                  color: white; border: none; border-radius: 3px; }
         button:hover { background: #357abd; }
         #canvas-editor { position: fixed; top: 10px; right: 10px; bottom: 10px; 
                          width: calc(100vw - 20px - 300px); max-width: 600px; min-width: 350px;
-                         background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px; 
-                         color: white; display: none; overflow: hidden; }
+                         background: rgba(0,0,0,0.8); padding: 15px; padding-left: 25px; border-radius: 5px; 
+                         color: white; display: none; overflow-y: auto; -webkit-overflow-scrolling: touch;
+                         display: flex; flex-direction: column; }
+        #canvas-editor:not([style*="display: none"]) { display: flex; }
         #display-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
         #texture-canvas { display: none; } /* Hidden - used only for texture generation */
         .quality-info { font-size: 10px; color: #888; margin-top: 5px; }
@@ -36,51 +39,141 @@
         #draw-tools { margin: 5px 0; }
         #status { margin-top: 10px; font-size: 12px; color: #0f0; }
         #performance-info { font-size: 10px; color: #888; margin-top: 5px; }
+        
+        /* Three.js Editor-Style Components */
+        .ui-panel { position: relative; }
+        .ui-resizer { 
+            position: absolute;
+            background: linear-gradient(to right, 
+                transparent 0%, 
+                rgba(74, 144, 226, 0.3) 30%, 
+                rgba(74, 144, 226, 0.6) 50%, 
+                rgba(74, 144, 226, 0.3) 70%, 
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            touch-action: none;
+            user-select: none;
+        }
+        .ui-resizer:hover, .ui-resizer.resizing { opacity: 1; }
+        .ui-panel:hover .ui-resizer { opacity: 0.7; }
+        
+        .ui-resizer.vertical {
+            left: 0; top: 0; bottom: 0; width: 10px;
+            cursor: ew-resize;
+            border-radius: 5px 0 0 5px;
+        }
+        
+        /* Collapsible Panel System */
+        .collapsible-panel .panel-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 10px;
+            transition: background 0.2s ease;
+            flex-shrink: 0;
+        }
+        .collapsible-panel .panel-header:hover {
+            background: rgba(255,255,255,0.1);
+            padding: 8px 5px;
+            margin: 0 -5px 10px -5px;
+            border-radius: 3px;
+        }
+        .collapsible-panel .panel-toggle {
+            margin-right: 8px;
+            font-size: 12px;
+            color: #4a90e2;
+            font-weight: bold;
+            transition: transform 0.2s ease;
+        }
+        .collapsible-panel .panel-content {
+            overflow: hidden;
+            transition: all 0.3s ease;
+            max-height: 1000px;
+        }
+        .collapsible-panel.collapsed .panel-content {
+            max-height: 0;
+            margin: 0;
+            padding: 0;
+        }
+        .collapsible-panel.collapsed .panel-toggle {
+            transform: rotate(-90deg);
+        }
+        
+        /* Special handling for main panel collapses */
+        .ui-panel.panel-collapsed {
+            height: auto !important;
+            bottom: auto !important;
+        }
+        .ui-panel.panel-collapsed .collapsible-panel:not(.main-panel) {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div id="drop-zone">Drag & Drop GLB File</div>
     
-    <div id="controls">
-        <h3>GLB Scene Editor</h3>
-        <div class="control-group">
-            <label>Background Color:</label>
-            <input type="color" id="bg-color" value="#cccccc">
-        </div>
-        <button id="clear-model-btn" style="display:none;">Remove Model</button>
-        <div id="status">Drop a GLB file to begin</div>
-        <div id="performance-info">Performance: Ready</div>
-        
-        <div id="model-controls">
-            <h4>Model Controls</h4>
-            <div class="control-group">
-                <label>Position X: <span id="pos-x-val">0</span></label>
-                <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
-                <label>Position Z: <span id="pos-z-val">0</span></label>
-                <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
+    <div id="controls" class="ui-panel">
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="controls" data-target="controls">
+                <span class="panel-toggle">▼</span>
+                <h3 style="margin: 0;">GLB Scene Editor</h3>
             </div>
-            <div class="control-group">
-                <label>Scale: <span id="scale-val">1.0</span></label>
-                <input type="range" id="scale" min="0.1" max="5" step="0.1" value="1">
+            <div class="panel-content">
+                <div class="control-group">
+                    <label>Background Color:</label>
+                    <input type="color" id="bg-color" value="#cccccc">
+                </div>
+                <button id="clear-model-btn" style="display:none;">Remove Model</button>
+                <div id="status">Drop a GLB file to begin</div>
+                <div id="performance-info">Performance: Ready</div>
+                
+                <div id="model-controls" class="collapsible-panel">
+                    <div class="panel-header" data-panel="model-controls">
+                        <span class="panel-toggle">▼</span>
+                        <h4 style="margin: 0;">Model Controls</h4>
+                    </div>
+                    <div class="panel-content">
+                        <div class="control-group">
+                            <label>Position X: <span id="pos-x-val">0</span></label>
+                            <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
+                            <label>Position Z: <span id="pos-z-val">0</span></label>
+                            <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
+                        </div>
+                        <div class="control-group">
+                            <label>Scale: <span id="scale-val">1.0</span></label>
+                            <input type="range" id="scale" min="0.1" max="5" step="0.1" value="1">
+                        </div>
+                        <div class="control-group">
+                            <label>Rotation Y: <span id="rot-y-val">0°</span></label>
+                            <input type="range" id="rot-y" min="0" max="360" step="5" value="0">
+                        </div>
+                        <div class="control-group">
+                            <label>
+                                <input type="checkbox" id="backlight-toggle"> Backlight
+                            </label>
+                        </div>
+                        <button id="toggle-canvas-btn">Show Canvas Editor</button>
+                    </div>
+                </div>
             </div>
-            <div class="control-group">
-                <label>Rotation Y: <span id="rot-y-val">0°</span></label>
-                <input type="range" id="rot-y" min="0" max="360" step="5" value="0">
-            </div>
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="backlight-toggle"> Backlight
-                </label>
-            </div>
-            <button id="toggle-canvas-btn">Show Canvas Editor</button>
         </div>
     </div>
     
-    <div id="canvas-editor">
-        <h4>High-Resolution Texture Editor</h4>
-        <canvas id="display-canvas" width="512" height="512" style="max-width: 100%; max-height: calc(100vh - 200px); height: auto; width: auto;"></canvas>
-        <canvas id="texture-canvas" width="1024" height="1024"></canvas>
-        <div id="canvas-controls">
+    <div id="canvas-editor" class="ui-panel">
+        <div class="ui-resizer vertical" data-panel="canvas-editor"></div>
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="canvas-editor-content" data-target="canvas-editor">
+                <span class="panel-toggle">▼</span>
+                <h4 style="margin: 0;">High-Resolution Texture Editor</h4>
+            </div>
+            <div class="panel-content" style="flex: 1; display: flex; flex-direction: column;">
+                <canvas id="display-canvas" width="512" height="512" style="max-width: 100%; height: auto; width: auto;"></canvas>
+                <canvas id="texture-canvas" width="1024" height="1024"></canvas>
+                <div id="canvas-controls">
             <div id="mode-controls" style="margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 10px;">
                 <button id="draw-mode-btn" class="mode-btn">✏️ Draw</button>
                 <button id="select-mode-btn" class="mode-btn active">🔲 Select</button>
@@ -1089,7 +1182,23 @@
         document.getElementById('toggle-canvas-btn').addEventListener('click', () => {
             const editor = document.getElementById('canvas-editor');
             const isHidden = editor.style.display === 'none' || window.getComputedStyle(editor).display === 'none';
-            editor.style.display = isHidden ? 'block' : 'none';
+            
+            if (isHidden) {
+                // Show the editor and ensure it's expanded
+                editor.style.display = 'flex';
+                editor.classList.remove('panel-collapsed');
+                
+                // Ensure the main panel is expanded
+                const mainPanel = editor.querySelector('.collapsible-panel.main-panel');
+                if (mainPanel) {
+                    mainPanel.classList.remove('collapsed');
+                    const toggle = mainPanel.querySelector('.panel-toggle');
+                    if (toggle) toggle.textContent = '▼';
+                }
+            } else {
+                // Hide the editor completely
+                editor.style.display = 'none';
+            }
         });
         
         document.getElementById('hide-canvas-btn').addEventListener('click', () => {
@@ -1206,6 +1315,177 @@
                     console.warn(`High memory usage: ${memUsed}MB / ${memLimit}MB`);
                 }
             }, 10000);
+        }
+        
+        // Three.js Editor-Style UI System
+        class UIPanel {
+            constructor(element) {
+                this.element = element;
+                this.state = {};
+                this.initializeCollapsiblePanels();
+                this.initializeResizers();
+            }
+            
+            initializeCollapsiblePanels() {
+                const headers = this.element.querySelectorAll('.panel-header');
+                headers.forEach(header => {
+                    header.addEventListener('click', (e) => {
+                        const panel = header.parentElement;
+                        const panelId = header.dataset.panel;
+                        this.togglePanel(panel, panelId);
+                    });
+                });
+            }
+            
+            togglePanel(panel, panelId) {
+                const isCollapsed = panel.classList.contains('collapsed');
+                panel.classList.toggle('collapsed');
+                
+                // Store state
+                this.state[panelId] = !isCollapsed;
+                
+                // Update toggle icon
+                const toggle = panel.querySelector('.panel-toggle');
+                if (toggle) {
+                    toggle.textContent = isCollapsed ? '▼' : '▶';
+                }
+                
+                // Handle main panel collapse (entire container)
+                const header = panel.querySelector('.panel-header');
+                const targetId = header?.dataset.target;
+                if (targetId) {
+                    const targetPanel = document.getElementById(targetId);
+                    if (targetPanel) {
+                        if (!isCollapsed) {
+                            // Collapsing - make panel header-only size
+                            targetPanel.classList.add('panel-collapsed');
+                        } else {
+                            // Expanding - restore full panel
+                            targetPanel.classList.remove('panel-collapsed');
+                        }
+                    }
+                }
+            }
+            
+            initializeResizers() {
+                const resizers = this.element.querySelectorAll('.ui-resizer');
+                resizers.forEach(resizer => {
+                    this.setupResizer(resizer);
+                });
+            }
+            
+            setupResizer(resizer) {
+                let isResizing = false;
+                let startPointer = { x: 0, y: 0 };
+                let startSize = { width: 0, height: 0 };
+                
+                resizer.addEventListener('pointerdown', (e) => {
+                    e.preventDefault();
+                    isResizing = true;
+                    startPointer = { x: e.clientX, y: e.clientY };
+                    
+                    const targetPanel = document.getElementById(resizer.dataset.panel);
+                    if (targetPanel) {
+                        const rect = targetPanel.getBoundingClientRect();
+                        startSize = { width: rect.width, height: rect.height };
+                        
+                        resizer.classList.add('resizing');
+                        resizer.setPointerCapture(e.pointerId);
+                        document.body.style.cursor = resizer.classList.contains('vertical') ? 'ew-resize' : 'ns-resize';
+                    }
+                });
+                
+                resizer.addEventListener('pointermove', (e) => {
+                    if (!isResizing) return;
+                    
+                    const targetPanel = document.getElementById(resizer.dataset.panel);
+                    if (!targetPanel) return;
+                    
+                    if (resizer.classList.contains('vertical')) {
+                        // Horizontal resizing
+                        const deltaX = startPointer.x - e.clientX;
+                        const newWidth = Math.max(350, Math.min(window.innerWidth - 50, startSize.width + deltaX));
+                        targetPanel.style.width = newWidth + 'px';
+                        
+                        // Update canvas size
+                        this.updateCanvasSize(targetPanel);
+                    }
+                });
+                
+                resizer.addEventListener('pointerup', (e) => {
+                    if (!isResizing) return;
+                    
+                    isResizing = false;
+                    resizer.classList.remove('resizing');
+                    resizer.releasePointerCapture(e.pointerId);
+                    document.body.style.cursor = '';
+                });
+                
+                // Handle pointer cancel (e.g., when pointer leaves window)
+                resizer.addEventListener('pointercancel', (e) => {
+                    isResizing = false;
+                    resizer.classList.remove('resizing');
+                    document.body.style.cursor = '';
+                });
+            }
+            
+            updateCanvasSize(panel) {
+                const displayCanvas = panel.querySelector('#display-canvas');
+                if (!displayCanvas) return;
+                
+                const panelWidth = panel.offsetWidth;
+                const availableWidth = panelWidth - 50; // Account for padding and resizer
+                displayCanvas.style.maxWidth = Math.min(availableWidth, 512) + 'px';
+                
+                // Trigger layer re-rendering after size change
+                if (window.layerManager) {
+                    setTimeout(() => {
+                        window.layerManager.renderLayers();
+                    }, 50);
+                }
+            }
+        }
+        
+        // Initialize UI System
+        function initializeUISystem() {
+            // Initialize controls panel
+            const controlsPanel = document.getElementById('controls');
+            if (controlsPanel) {
+                new UIPanel(controlsPanel);
+            }
+            
+            // Initialize canvas editor panel
+            const canvasEditor = document.getElementById('canvas-editor');
+            if (canvasEditor) {
+                const uiPanel = new UIPanel(canvasEditor);
+                
+                // Update canvas size on window resize
+                window.addEventListener('resize', () => {
+                    uiPanel.updateCanvasSize(canvasEditor);
+                });
+                
+                // Initial canvas size update
+                setTimeout(() => {
+                    uiPanel.updateCanvasSize(canvasEditor);
+                }, 100);
+            }
+        }
+        
+        // Initialize UI system after page load
+        initializeUISystem();
+        
+        // Canvas coordinate transformation helper
+        function getCanvasCoordinates(canvas, e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY,
+                scaleX: scaleX,
+                scaleY: scaleY
+            };
         }
     </script>
 </body>
