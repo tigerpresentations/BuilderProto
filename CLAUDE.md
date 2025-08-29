@@ -89,3 +89,4 @@ All files are self-contained HTML with embedded JavaScript. No external dependen
 - Browser memory limits may affect very large models
 - File API required for save/load functionality
 - When communicating with Agents, remind them that simple, clever solutions are preferred over overly complex methods. They should look for standard solutions to problems rather than trying to solve it with novel code. Reinforce that they should focus on the requested topic, and not get distracted by new features and systems unless they are the clear, obvious, and easy solution to the problem. Advanced features are not the end goal here -- this is not a technical excercise to see how advanced we can be; eventually I hope for this to be a usable tool. Stability, maintainability, and reliability should always be an important factor in their recommendations.
+- Do not adjust the overall UI without explicit instruction from the user prompt.
