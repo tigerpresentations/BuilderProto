@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Design State Serialization</title>
+    <style>
+        body { margin: 0; padding: 10px; font-family: Arial; display: flex; }
+        .viewer { flex: 1; }
+        .controls { width: 350px; padding: 20px; background: #f5f5f5; }
+        .control-group { margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .control-group h4 { margin: 0 0 10px 0; }
+        button { padding: 8px 15px; margin: 5px; cursor: pointer; }
+        .save-btn { background: #007bff; color: white; border: none; }
+        .load-btn { background: #28a745; color: white; border: none; }
+        .reset-btn { background: #dc3545; color: white; border: none; }
+        input[type="file"] { margin: 5px 0; }
+        .storage-status { font-size: 12px; color: #666; margin: 5px 0; }
+        input[type="range"] { width: 100%; }
+        input[type="color"] { width: 50px; }
+        .json-output { background: #f8f9fa; padding: 10px; border: 1px solid #ddd; 
+                      max-height: 200px; overflow-y: auto; font-family: monospace; 
+                      font-size: 11px; white-space: pre-wrap; }
+        .object-controls { background: #fff; margin: 5px 0; padding: 8px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="viewer">
+        <canvas id="canvas"></canvas>
+    </div>
+    
+    <div class="controls">
+        <div class="control-group">
+            <button class="save-btn" onclick="saveDesign()">Download Design</button>
+            <input type="file" id="fileInput" accept=".json" onchange="loadDesignFromFile(this)">
+            <button class="load-btn" onclick="loadFromStorage()">Load from Browser</button>
+            <button class="reset-btn" onclick="resetToDefault()">Reset to Default</button>
+            <div class="storage-status" id="storageStatus">Checking storage...</div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Scene Controls</h4>
+            <label>Camera Z: <input type="range" min="2" max="10" value="5" oninput="updateCamera(this.value)"></label>
+            <label>Ambient Light: <input type="range" min="0" max="1" step="0.1" value="0.4" oninput="updateAmbientLight(this.value)"></label>
+        </div>
+        
+        <div id="objectControls"></div>
+        
+        <div class="control-group">
+            <h4>Saved Design JSON:</h4>
+            <div id="jsonOutput" class="json-output">No design saved yet</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas') });
+        
+        let objects = [];
+        let ambientLight, directionalLight;
+        let defaultState;
+        
+        function init() {
+            const canvas = document.getElementById('canvas');
+            const rect = canvas.parentElement.getBoundingClientRect();
+            renderer.setSize(rect.width, rect.height);
+            camera.aspect = rect.width / rect.height;
+            camera.updateProjectionMatrix();
+            
+            // Create lighting
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(ambientLight, directionalLight);
+            
+            // Create objects with custom metadata
+            createObject('cube', new THREE.BoxGeometry(1, 1, 1), { x: -2, y: 0, z: 0 }, { type: 'container', priority: 1 });
+            createObject('sphere', new THREE.SphereGeometry(0.7, 16, 16), { x: 2, y: 0, z: 0 }, { type: 'decoration', priority: 2 });
+            createObject('cylinder', new THREE.CylinderGeometry(0.5, 0.5, 1.5, 8), { x: 0, y: 1.5, z: 0 }, { type: 'support', priority: 3 });
+            createObject('plane', new THREE.PlaneGeometry(3, 3), { x: 0, y: -1, z: 0 }, { type: 'base', priority: 0 });
+            
+            // Position camera
+            camera.position.set(0, 0, 5);
+            
+            // Save default state
+            defaultState = serializeScene();
+            
+            // Check localStorage availability and load saved state
+            checkStorageAvailability();
+            const saved = getStoredDesign();
+            if (saved) {
+                deserializeScene(saved);
+            }
+            
+            createControls();
+            animate();
+        }
+        
+        function createObject(name, geometry, position, metadata) {
+            const material = new THREE.MeshLambertMaterial({ 
+                color: Math.random() * 0xffffff,
+                transparent: true,
+                opacity: 1.0
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(position.x, position.y, position.z);
+            mesh.name = name;
+            mesh.userData = { 
+                originalGeometry: geometry.type,
+                metadata: metadata,
+                textureUrl: null
+            };
+            
+            if (name === 'plane') {
+                mesh.rotation.x = -Math.PI / 2;
+            }
+            
+            scene.add(mesh);
+            objects.push(mesh);
+        }
+        
+        function createControls() {
+            const container = document.getElementById('objectControls');
+            container.innerHTML = '';
+            
+            objects.forEach((obj, index) => {
+                const div = document.createElement('div');
+                div.className = 'object-controls';
+                div.innerHTML = `
+                    <h4>${obj.name}</h4>
+                    <label>X: <input type="range" min="-5" max="5" step="0.1" value="${obj.position.x}" 
+                           oninput="updateObjectProperty(${index}, 'position', 'x', this.value)"></label>
+                    <label>Y: <input type="range" min="-3" max="3" step="0.1" value="${obj.position.y}" 
+                           oninput="updateObjectProperty(${index}, 'position', 'y', this.value)"></label>
+                    <label>Scale: <input type="range" min="0.1" max="3" step="0.1" value="${obj.scale.x}" 
+                           oninput="updateObjectProperty(${index}, 'scale', 'uniform', this.value)"></label>
+                    <label>Rotation Y: <input type="range" min="0" max="6.28" step="0.1" value="${obj.rotation.y}" 
+                           oninput="updateObjectProperty(${index}, 'rotation', 'y', this.value)"></label>
+                    <label>Color: <input type="color" value="#${obj.material.color.getHexString()}" 
+                           onchange="updateObjectProperty(${index}, 'material', 'color', this.value)"></label>
+                    <label>Opacity: <input type="range" min="0.1" max="1" step="0.1" value="${obj.material.opacity}" 
+                           oninput="updateObjectProperty(${index}, 'material', 'opacity', this.value)"></label>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        function updateObjectProperty(index, category, property, value) {
+            const obj = objects[index];
+            
+            if (category === 'position') {
+                obj.position[property] = parseFloat(value);
+            } else if (category === 'scale') {
+                if (property === 'uniform') {
+                    obj.scale.setScalar(parseFloat(value));
+                }
+            } else if (category === 'rotation') {
+                obj.rotation[property] = parseFloat(value);
+            } else if (category === 'material') {
+                if (property === 'color') {
+                    obj.material.color.setHex(parseInt(value.replace('#', '0x')));
+                } else if (property === 'opacity') {
+                    obj.material.opacity = parseFloat(value);
+                }
+            }
+        }
+        
+        function updateCamera(z) {
+            camera.position.z = parseFloat(z);
+        }
+        
+        function updateAmbientLight(intensity) {
+            ambientLight.intensity = parseFloat(intensity);
+        }
+        
+        function serializeScene() {
+            return {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                camera: {
+                    position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+                    rotation: { x: camera.rotation.x, y: camera.rotation.y, z: camera.rotation.z }
+                },
+                lighting: {
+                    ambient: { intensity: ambientLight.intensity, color: ambientLight.color.getHex() },
+                    directional: { 
+                        intensity: directionalLight.intensity, 
+                        color: directionalLight.color.getHex(),
+                        position: { x: directionalLight.position.x, y: directionalLight.position.y, z: directionalLight.position.z }
+                    }
+                },
+                objects: objects.map(obj => ({
+                    name: obj.name,
+                    geometry: obj.userData.originalGeometry,
+                    position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                    rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+                    scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
+                    material: {
+                        color: obj.material.color.getHex(),
+                        opacity: obj.material.opacity,
+                        transparent: obj.material.transparent,
+                        type: obj.material.type
+                    },
+                    userData: obj.userData,
+                    visible: obj.visible
+                }))
+            };
+        }
+        
+        function deserializeScene(data) {
+            // Clear existing objects
+            objects.forEach(obj => scene.remove(obj));
+            objects = [];
+            
+            // Restore camera
+            camera.position.set(data.camera.position.x, data.camera.position.y, data.camera.position.z);
+            camera.rotation.set(data.camera.rotation.x, data.camera.rotation.y, data.camera.rotation.z);
+            
+            // Restore lighting
+            ambientLight.intensity = data.lighting.ambient.intensity;
+            ambientLight.color.setHex(data.lighting.ambient.color);
+            directionalLight.intensity = data.lighting.directional.intensity;
+            directionalLight.color.setHex(data.lighting.directional.color);
+            directionalLight.position.set(
+                data.lighting.directional.position.x,
+                data.lighting.directional.position.y,
+                data.lighting.directional.position.z
+            );
+            
+            // Restore objects
+            data.objects.forEach(objData => {
+                let geometry;
+                switch (objData.geometry) {
+                    case 'BoxGeometry': geometry = new THREE.BoxGeometry(1, 1, 1); break;
+                    case 'SphereGeometry': geometry = new THREE.SphereGeometry(0.7, 16, 16); break;
+                    case 'CylinderGeometry': geometry = new THREE.CylinderGeometry(0.5, 0.5, 1.5, 8); break;
+                    case 'PlaneGeometry': geometry = new THREE.PlaneGeometry(3, 3); break;
+                    default: geometry = new THREE.BoxGeometry(1, 1, 1);
+                }
+                
+                const material = new THREE.MeshLambertMaterial({
+                    color: objData.material.color,
+                    opacity: objData.material.opacity,
+                    transparent: objData.material.transparent
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.name = objData.name;
+                mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
+                mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
+                mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                mesh.userData = objData.userData;
+                mesh.visible = objData.visible;
+                
+                scene.add(mesh);
+                objects.push(mesh);
+            });
+            
+            createControls();
+        }
+        
+        function checkStorageAvailability() {
+            let storageAvailable = false;
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+                storageAvailable = true;
+            } catch (e) {
+                storageAvailable = false;
+            }
+            
+            const status = document.getElementById('storageStatus');
+            if (storageAvailable) {
+                status.textContent = 'Browser storage: Available';
+            } else {
+                status.textContent = 'Browser storage: Not available (use file download/upload)';
+            }
+        }
+        
+        function getStoredDesign() {
+            try {
+                const saved = localStorage.getItem('designState');
+                return saved ? JSON.parse(saved) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        function saveDesign() {
+            const state = serializeScene();
+            
+            // Try localStorage first
+            try {
+                localStorage.setItem('designState', JSON.stringify(state));
+            } catch (e) {
+                console.log('localStorage not available, downloading file');
+            }
+            
+            // Always download file as primary method
+            const dataStr = JSON.stringify(state, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `design-${new Date().toISOString().slice(0,10)}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+            
+            document.getElementById('jsonOutput').textContent = dataStr;
+            console.log('Design saved and downloaded:', state);
+        }
+        
+        function loadDesignFromFile(input) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const state = JSON.parse(e.target.result);
+                        deserializeScene(state);
+                        document.getElementById('jsonOutput').textContent = JSON.stringify(state, null, 2);
+                        console.log('Design loaded from file:', state);
+                    } catch (error) {
+                        alert('Error loading design file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+        
+        function loadFromStorage() {
+            const saved = getStoredDesign();
+            if (saved) {
+                deserializeScene(saved);
+                document.getElementById('jsonOutput').textContent = JSON.stringify(saved, null, 2);
+                console.log('Design loaded from storage:', saved);
+            } else {
+                alert('No saved design found in browser storage');
+            }
+        }
+        
+        function resetToDefault() {
+            if (defaultState) {
+                deserializeScene(defaultState);
+                try {
+                    localStorage.removeItem('designState');
+                } catch (e) {
+                    console.log('localStorage not available for clearing');
+                }
+                document.getElementById('jsonOutput').textContent = 'Reset to default state';
+                console.log('Reset to default');
+            }
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        
+        init();
+    </script>
+</body>
+</html>

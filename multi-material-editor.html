@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-Material 3D Editor with Interactive Handles</title>
+    <style>
+        body { margin: 0; padding: 10px; font-family: Arial; display: flex; }
+        .viewer { flex: 1; position: relative; }
+        .sidebar { width: 380px; padding: 20px; background: #f5f5f5; overflow-y: auto; height: calc(100vh - 20px); }
+        .control-group { margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; }
+        .control-group h4 { margin: 0 0 10px 0; color: #333; }
+        button { padding: 8px 15px; margin: 5px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; }
+        .primary-btn { background: #007bff; color: white; border: none; }
+        .success-btn { background: #28a745; color: white; border: none; }
+        .danger-btn { background: #dc3545; color: white; border: none; }
+        .warning-btn { background: #ffc107; color: #212529; border: none; }
+        input[type="range"] { width: 100%; }
+        input[type="color"] { width: 50px; }
+        input[type="file"] { margin: 5px 0; }
+        
+        /* Material selector styles */
+        .material-tabs {
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+        .material-tab {
+            padding: 8px 12px;
+            background: #e0e0e0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 12px;
+        }
+        .material-tab.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #45a049;
+        }
+        .material-tab:hover:not(.active) {
+            background: #d0d0d0;
+        }
+        .no-materials {
+            color: #999;
+            font-style: italic;
+            padding: 10px;
+        }
+        
+        /* Canvas editor styles */
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        #drawCanvas { 
+            border: 1px solid #ccc; 
+            display: block;
+        }
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+        .canvas-controls { margin: 10px 0; }
+        
+        /* Handle styles */
+        .handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: white;
+            border: 2px solid #007bff;
+            border-radius: 2px;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .handle.corner { cursor: nwse-resize; }
+        .handle.rotate { 
+            border-radius: 50%; 
+            background: #ffc107;
+            border-color: #ff9800;
+            cursor: grab;
+        }
+        .handle.rotate:active { cursor: grabbing; }
+        
+        /* Image object styles */
+        .image-object {
+            position: absolute;
+            border: 2px dashed transparent;
+            pointer-events: none;
+        }
+        .image-object.selected {
+            border-color: #007bff;
+        }
+        
+        .material-info { 
+            background: #e8f5e9; 
+            padding: 8px; 
+            border-radius: 3px; 
+            margin: 5px 0; 
+            font-size: 12px; 
+        }
+        
+        .image-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+        .image-item {
+            padding: 5px 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .image-item:hover { background: #f0f0f0; }
+        .image-item.selected { background: #e3f2fd; }
+        .image-item button { padding: 2px 8px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="viewer">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+    
+    <div class="sidebar">
+        <div class="control-group">
+            <h4>Model Upload</h4>
+            <input type="file" id="glbUpload" accept=".glb,.gltf">
+            <button class="primary-btn" onclick="document.getElementById('glbUpload').click()">Load GLB Model</button>
+            <div id="materialInfo" class="material-info">No model loaded</div>
+        </div>
+        
+        <div class="control-group" id="materialSelector" style="display: none;">
+            <h4>Material Selection</h4>
+            <div id="materialTabs" class="material-tabs"></div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Canvas Editor</h4>
+            <div class="canvas-controls">
+                <input type="color" id="colorPicker" value="#ff0000">
+                <input type="range" id="brushSize" min="1" max="20" value="5" title="Brush Size">
+                <button onclick="toggleDrawMode()" id="drawModeBtn">Draw Mode: ON</button>
+                <button onclick="clearCanvas()">Clear Canvas</button>
+                <button onclick="document.getElementById('imageUpload').click()">Add Image</button>
+                <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+            </div>
+            
+            <div class="canvas-container">
+                <canvas id="drawCanvas" width="256" height="256"></canvas>
+                <canvas id="overlayCanvas" width="256" height="256"></canvas>
+            </div>
+            
+            <div id="imageList" class="image-list" style="display: none;">
+                <h5 style="margin: 5px 10px;">Images on Canvas:</h5>
+                <div id="imageItems"></div>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Object Transform</h4>
+            <label>Position X: <input type="range" id="posX" min="-5" max="5" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Position Y: <input type="range" id="posY" min="-5" max="5" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Position Z: <input type="range" id="posZ" min="-5" max="5" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Rotation X: <input type="range" id="rotX" min="0" max="6.28" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Rotation Y: <input type="range" id="rotY" min="0" max="6.28" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Rotation Z: <input type="range" id="rotZ" min="0" max="6.28" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Scale: <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1" oninput="updateTransform()"></label>
+        </div>
+        
+        <div class="control-group">
+            <h4>Scene Management</h4>
+            <button class="success-btn" onclick="saveScene()">Download Scene</button>
+            <button class="primary-btn" onclick="document.getElementById('sceneUpload').click()">Load Scene</button>
+            <input type="file" id="sceneUpload" accept=".json" style="display: none;">
+            <button class="danger-btn" onclick="resetScene()">Reset Scene</button>
+            <div id="sceneStatus" style="font-size: 12px; margin-top: 5px;">Ready</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Core Three.js setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('mainCanvas') });
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        const loader = new THREE.GLTFLoader();
+        
+        // Scene state
+        let currentModel = null;
+        let currentGLBData = null;
+        
+        // Material management
+        let imageMaterials = [];  // Array of all image materials found
+        let currentMaterialIndex = 0;  // Currently selected material
+        let materialTextures = new Map();  // Store textures per material
+        let materialCanvasStates = new Map();  // Store canvas states per material
+        
+        // Canvas setup
+        const drawCanvas = document.getElementById('drawCanvas');
+        const ctx = drawCanvas.getContext('2d');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        
+        // Drawing state
+        let isDrawing = false;
+        let drawMode = true;
+        let lastX = 0, lastY = 0;
+        
+        // Image objects management
+        let canvasImages = [];  // Array of images on canvas for current material
+        let selectedImageIndex = -1;
+        let isDragging = false;
+        let isResizing = false;
+        let isRotating = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let initialTransform = null;
+        
+        // Handle types
+        const HANDLE_SIZE = 12;
+        
+        function init() {
+            // Setup renderer
+            const container = document.querySelector('.viewer');
+            const rect = container.getBoundingClientRect();
+            renderer.setSize(rect.width, rect.height);
+            camera.aspect = rect.width / rect.height;
+            camera.updateProjectionMatrix();
+            
+            // Setup lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(ambientLight, directionalLight);
+            
+            // Setup camera
+            camera.position.set(0, 0, 5);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Initialize canvas
+            clearCanvas();
+            
+            // Try to load default GLB
+            fetch('91x91.glb')
+                .then(response => {
+                    if (response.ok) {
+                        loadGLB('91x91.glb');
+                    }
+                })
+                .catch(() => {
+                    console.log('Default GLB not found');
+                });
+            
+            setupEventListeners();
+            animate();
+        }
+        
+        function setupEventListeners() {
+            // GLB upload
+            document.getElementById('glbUpload').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    const file = e.target.files[0];
+                    const url = URL.createObjectURL(file);
+                    
+                    const reader = new FileReader();
+                    reader.onload = (readerEvent) => {
+                        currentGLBData = {
+                            name: file.name,
+                            data: readerEvent.target.result
+                        };
+                        loadGLB(url);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            // Image upload
+            document.getElementById('imageUpload').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    loadImageToCanvas(e.target.files[0]);
+                }
+            });
+            
+            // Scene upload
+            document.getElementById('sceneUpload').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    loadScene(e.target.files[0]);
+                }
+            });
+            
+            // Overlay canvas events for handles
+            overlayCanvas.addEventListener('mousedown', handleMouseDown);
+            overlayCanvas.addEventListener('mousemove', handleMouseMove);
+            overlayCanvas.addEventListener('mouseup', handleMouseUp);
+            overlayCanvas.addEventListener('mouseout', handleMouseUp);
+            
+            // Draw canvas events
+            drawCanvas.addEventListener('mousedown', startDrawing);
+            drawCanvas.addEventListener('mousemove', draw);
+            drawCanvas.addEventListener('mouseup', stopDrawing);
+            drawCanvas.addEventListener('mouseout', stopDrawing);
+        }
+        
+        function loadGLB(url) {
+            loader.load(url, (gltf) => {
+                // Remove existing model
+                if (currentModel) {
+                    scene.remove(currentModel);
+                    currentModel.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (child.material.map) child.material.map.dispose();
+                            child.material.dispose();
+                        }
+                    });
+                }
+                
+                // Clear previous material data
+                materialTextures.clear();
+                materialCanvasStates.clear();
+                imageMaterials = [];
+                
+                currentModel = gltf.scene;
+                scene.add(currentModel);
+                
+                // Center model
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const center = box.getCenter(new THREE.Vector3());
+                currentModel.position.sub(center);
+                
+                // Find all Image materials
+                findImageMaterials();
+                
+                // Setup UI
+                updateMaterialTabs();
+                updateTransformControls();
+                updateMaterialInfo();
+                
+                document.getElementById('sceneStatus').textContent = 'GLB loaded successfully';
+            });
+        }
+        
+        function findImageMaterials() {
+            imageMaterials = [];
+            const foundMaterials = new Set();
+            
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    
+                    materials.forEach(material => {
+                        if (!foundMaterials.has(material)) {
+                            const materialName = material.name || '';
+                            if (materialName.toLowerCase().includes('image')) {
+                                foundMaterials.add(material);
+                                imageMaterials.push({
+                                    material: material,
+                                    name: materialName || `Material ${imageMaterials.length + 1}`,
+                                    mesh: child
+                                });
+                                
+                                // Initialize canvas state for this material
+                                if (!materialCanvasStates.has(material)) {
+                                    const tempCanvas = document.createElement('canvas');
+                                    tempCanvas.width = 256;
+                                    tempCanvas.height = 256;
+                                    const tempCtx = tempCanvas.getContext('2d');
+                                    tempCtx.fillStyle = 'white';
+                                    tempCtx.fillRect(0, 0, 256, 256);
+                                    materialCanvasStates.set(material, {
+                                        canvasData: tempCanvas.toDataURL(),
+                                        images: []
+                                    });
+                                }
+                                
+                                // Setup texture for this material
+                                setupMaterialTexture(material);
+                            }
+                        }
+                    });
+                }
+            });
+            
+            if (imageMaterials.length > 0) {
+                currentMaterialIndex = 0;
+                loadMaterialCanvas(0);
+            }
+        }
+        
+        function setupMaterialTexture(material) {
+            const texture = new THREE.CanvasTexture(drawCanvas);
+            texture.generateMipmaps = false;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.flipY = false;
+            
+            materialTextures.set(material, texture);
+            material.map = texture;
+            material.needsUpdate = true;
+        }
+        
+        function updateMaterialTabs() {
+            const container = document.getElementById('materialTabs');
+            const selector = document.getElementById('materialSelector');
+            
+            container.innerHTML = '';
+            
+            if (imageMaterials.length === 0) {
+                selector.style.display = 'none';
+                container.innerHTML = '<div class="no-materials">No Image materials found</div>';
+                return;
+            }
+            
+            selector.style.display = 'block';
+            
+            imageMaterials.forEach((matInfo, index) => {
+                const tab = document.createElement('div');
+                tab.className = 'material-tab' + (index === currentMaterialIndex ? ' active' : '');
+                tab.textContent = matInfo.name;
+                tab.onclick = () => selectMaterial(index);
+                container.appendChild(tab);
+            });
+        }
+        
+        function selectMaterial(index) {
+            if (index === currentMaterialIndex) return;
+            
+            // Save current canvas state
+            saveMaterialCanvas(currentMaterialIndex);
+            
+            // Switch to new material
+            currentMaterialIndex = index;
+            loadMaterialCanvas(index);
+            
+            // Update UI
+            updateMaterialTabs();
+            updateMaterialInfo();
+        }
+        
+        function saveMaterialCanvas(index) {
+            if (index < 0 || index >= imageMaterials.length) return;
+            
+            const material = imageMaterials[index].material;
+            materialCanvasStates.set(material, {
+                canvasData: drawCanvas.toDataURL(),
+                images: [...canvasImages]  // Deep copy of images array
+            });
+        }
+        
+        function loadMaterialCanvas(index) {
+            if (index < 0 || index >= imageMaterials.length) return;
+            
+            const material = imageMaterials[index].material;
+            const state = materialCanvasStates.get(material);
+            
+            if (state) {
+                // Load canvas image
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Update texture
+                    const texture = materialTextures.get(material);
+                    if (texture) {
+                        texture.needsUpdate = true;
+                    }
+                };
+                img.src = state.canvasData;
+                
+                // Load images array
+                canvasImages = state.images ? [...state.images] : [];
+                updateImageList();
+                drawOverlay();
+            } else {
+                clearCanvas();
+                canvasImages = [];
+                updateImageList();
+            }
+        }
+        
+        function updateMaterialInfo() {
+            const info = document.getElementById('materialInfo');
+            if (imageMaterials.length > 0) {
+                const current = imageMaterials[currentMaterialIndex];
+                info.innerHTML = `✅ ${imageMaterials.length} Image material(s) found<br>Current: ${current.name}`;
+                info.style.backgroundColor = '#e8f5e9';
+            } else {
+                info.textContent = '❌ No "Image" materials found in model';
+                info.style.backgroundColor = '#ffebee';
+            }
+        }
+        
+        function toggleDrawMode() {
+            drawMode = !drawMode;
+            const btn = document.getElementById('drawModeBtn');
+            btn.textContent = `Draw Mode: ${drawMode ? 'ON' : 'OFF'}`;
+            
+            if (drawMode) {
+                drawCanvas.style.cursor = 'crosshair';
+                overlayCanvas.style.pointerEvents = 'none';
+            } else {
+                drawCanvas.style.cursor = 'default';
+                overlayCanvas.style.pointerEvents = 'auto';
+            }
+        }
+        
+        function startDrawing(e) {
+            if (!drawMode) return;
+            isDrawing = true;
+            const rect = drawCanvas.getBoundingClientRect();
+            lastX = e.clientX - rect.left;
+            lastY = e.clientY - rect.top;
+        }
+        
+        function draw(e) {
+            if (!isDrawing || !drawMode) return;
+            
+            const rect = drawCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = document.getElementById('colorPicker').value;
+            ctx.lineWidth = document.getElementById('brushSize').value;
+            ctx.lineCap = 'round';
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            lastX = x;
+            lastY = y;
+            
+            // Update texture
+            if (currentMaterialIndex >= 0 && currentMaterialIndex < imageMaterials.length) {
+                const material = imageMaterials[currentMaterialIndex].material;
+                const texture = materialTextures.get(material);
+                if (texture) {
+                    texture.needsUpdate = true;
+                }
+            }
+        }
+        
+        function stopDrawing() {
+            isDrawing = false;
+        }
+        
+        function clearCanvas() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+            
+            // Clear images
+            canvasImages = [];
+            selectedImageIndex = -1;
+            updateImageList();
+            drawOverlay();
+            
+            // Update texture
+            if (currentMaterialIndex >= 0 && currentMaterialIndex < imageMaterials.length) {
+                const material = imageMaterials[currentMaterialIndex].material;
+                const texture = materialTextures.get(material);
+                if (texture) {
+                    texture.needsUpdate = true;
+                }
+            }
+        }
+        
+        function loadImageToCanvas(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Add image object to canvas
+                    const imageObj = {
+                        img: img,
+                        x: drawCanvas.width / 2 - img.width / 4,
+                        y: drawCanvas.height / 2 - img.height / 4,
+                        width: img.width / 2,
+                        height: img.height / 2,
+                        rotation: 0,
+                        name: file.name
+                    };
+                    
+                    canvasImages.push(imageObj);
+                    selectedImageIndex = canvasImages.length - 1;
+                    
+                    // Switch to select mode
+                    drawMode = false;
+                    toggleDrawMode();
+                    
+                    updateImageList();
+                    redrawCanvas();
+                    drawOverlay();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function redrawCanvas() {
+            // Clear and redraw everything
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+            
+            // Draw all images
+            canvasImages.forEach(imageObj => {
+                ctx.save();
+                ctx.translate(imageObj.x + imageObj.width / 2, imageObj.y + imageObj.height / 2);
+                ctx.rotate(imageObj.rotation);
+                ctx.drawImage(imageObj.img, -imageObj.width / 2, -imageObj.height / 2, imageObj.width, imageObj.height);
+                ctx.restore();
+            });
+            
+            // Update texture
+            if (currentMaterialIndex >= 0 && currentMaterialIndex < imageMaterials.length) {
+                const material = imageMaterials[currentMaterialIndex].material;
+                const texture = materialTextures.get(material);
+                if (texture) {
+                    texture.needsUpdate = true;
+                }
+            }
+        }
+        
+        function drawOverlay() {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            if (selectedImageIndex >= 0 && selectedImageIndex < canvasImages.length) {
+                const img = canvasImages[selectedImageIndex];
+                
+                // Draw selection border
+                overlayCtx.save();
+                overlayCtx.translate(img.x + img.width / 2, img.y + img.height / 2);
+                overlayCtx.rotate(img.rotation);
+                overlayCtx.strokeStyle = '#007bff';
+                overlayCtx.lineWidth = 2;
+                overlayCtx.setLineDash([5, 3]);
+                overlayCtx.strokeRect(-img.width / 2, -img.height / 2, img.width, img.height);
+                overlayCtx.restore();
+                
+                // Draw handles
+                drawHandles(img);
+            }
+        }
+        
+        function drawHandles(img) {
+            const corners = getImageCorners(img);
+            
+            // Corner resize handles
+            corners.forEach((corner, i) => {
+                overlayCtx.fillStyle = 'white';
+                overlayCtx.fillRect(corner.x - HANDLE_SIZE/2, corner.y - HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
+                overlayCtx.strokeStyle = '#007bff';
+                overlayCtx.lineWidth = 2;
+                overlayCtx.strokeRect(corner.x - HANDLE_SIZE/2, corner.y - HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
+            });
+            
+            // Rotation handle (top center)
+            const rotHandle = getRotationHandle(img);
+            overlayCtx.fillStyle = '#ffc107';
+            overlayCtx.beginPath();
+            overlayCtx.arc(rotHandle.x, rotHandle.y, HANDLE_SIZE/2, 0, Math.PI * 2);
+            overlayCtx.fill();
+            overlayCtx.strokeStyle = '#ff9800';
+            overlayCtx.lineWidth = 2;
+            overlayCtx.stroke();
+        }
+        
+        function getImageCorners(img) {
+            const cx = img.x + img.width / 2;
+            const cy = img.y + img.height / 2;
+            const cos = Math.cos(img.rotation);
+            const sin = Math.sin(img.rotation);
+            
+            const corners = [
+                { x: -img.width/2, y: -img.height/2 },  // Top-left
+                { x: img.width/2, y: -img.height/2 },   // Top-right
+                { x: img.width/2, y: img.height/2 },    // Bottom-right
+                { x: -img.width/2, y: img.height/2 }    // Bottom-left
+            ];
+            
+            return corners.map(corner => {
+                const rotX = corner.x * cos - corner.y * sin;
+                const rotY = corner.x * sin + corner.y * cos;
+                return { x: cx + rotX, y: cy + rotY };
+            });
+        }
+        
+        function getRotationHandle(img) {
+            const cx = img.x + img.width / 2;
+            const cy = img.y + img.height / 2;
+            const handleDist = -img.height/2 - 20;
+            
+            const rotX = 0;
+            const rotY = handleDist;
+            
+            const cos = Math.cos(img.rotation);
+            const sin = Math.sin(img.rotation);
+            
+            return {
+                x: cx + rotX * cos - rotY * sin,
+                y: cy + rotX * sin + rotY * cos
+            };
+        }
+        
+        function handleMouseDown(e) {
+            if (drawMode) return;
+            
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            dragStartX = x;
+            dragStartY = y;
+            
+            // Check if clicking on an image
+            let clickedImage = -1;
+            for (let i = canvasImages.length - 1; i >= 0; i--) {
+                if (isPointInImage(x, y, canvasImages[i])) {
+                    clickedImage = i;
+                    break;
+                }
+            }
+            
+            if (clickedImage >= 0) {
+                selectedImageIndex = clickedImage;
+                const img = canvasImages[selectedImageIndex];
+                
+                // Check for handle clicks
+                const corners = getImageCorners(img);
+                const rotHandle = getRotationHandle(img);
+                
+                // Check rotation handle
+                if (Math.hypot(x - rotHandle.x, y - rotHandle.y) < HANDLE_SIZE) {
+                    isRotating = true;
+                    initialTransform = { rotation: img.rotation };
+                } 
+                // Check corner handles
+                else {
+                    let cornerClicked = false;
+                    for (let corner of corners) {
+                        if (Math.abs(x - corner.x) < HANDLE_SIZE/2 && Math.abs(y - corner.y) < HANDLE_SIZE/2) {
+                            isResizing = true;
+                            initialTransform = { width: img.width, height: img.height };
+                            cornerClicked = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!cornerClicked) {
+                        isDragging = true;
+                        initialTransform = { x: img.x, y: img.y };
+                    }
+                }
+                
+                updateImageList();
+                drawOverlay();
+            } else {
+                selectedImageIndex = -1;
+                updateImageList();
+                drawOverlay();
+            }
+        }
+        
+        function handleMouseMove(e) {
+            if (!isDragging && !isResizing && !isRotating) return;
+            if (selectedImageIndex < 0) return;
+            
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const img = canvasImages[selectedImageIndex];
+            
+            if (isDragging) {
+                img.x = initialTransform.x + (x - dragStartX);
+                img.y = initialTransform.y + (y - dragStartY);
+            } else if (isResizing) {
+                const scale = Math.hypot(x - (img.x + img.width/2), y - (img.y + img.height/2)) / 
+                             Math.hypot(dragStartX - (img.x + img.width/2), dragStartY - (img.y + img.height/2));
+                img.width = initialTransform.width * scale;
+                img.height = initialTransform.height * scale;
+            } else if (isRotating) {
+                const cx = img.x + img.width / 2;
+                const cy = img.y + img.height / 2;
+                const angle = Math.atan2(y - cy, x - cx) + Math.PI/2;
+                img.rotation = angle;
+            }
+            
+            redrawCanvas();
+            drawOverlay();
+        }
+        
+        function handleMouseUp() {
+            isDragging = false;
+            isResizing = false;
+            isRotating = false;
+            initialTransform = null;
+        }
+        
+        function isPointInImage(x, y, img) {
+            const cx = img.x + img.width / 2;
+            const cy = img.y + img.height / 2;
+            
+            // Translate point to image's coordinate system
+            const dx = x - cx;
+            const dy = y - cy;
+            
+            // Rotate point back
+            const cos = Math.cos(-img.rotation);
+            const sin = Math.sin(-img.rotation);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+            
+            return Math.abs(localX) <= img.width/2 && Math.abs(localY) <= img.height/2;
+        }
+        
+        function updateImageList() {
+            const listContainer = document.getElementById('imageList');
+            const itemsContainer = document.getElementById('imageItems');
+            
+            if (canvasImages.length === 0) {
+                listContainer.style.display = 'none';
+                return;
+            }
+            
+            listContainer.style.display = 'block';
+            itemsContainer.innerHTML = '';
+            
+            canvasImages.forEach((img, index) => {
+                const item = document.createElement('div');
+                item.className = 'image-item' + (index === selectedImageIndex ? ' selected' : '');
+                item.innerHTML = `
+                    <span>${img.name || 'Image ' + (index + 1)}</span>
+                    <div>
+                        <button onclick="selectImage(${index})">Select</button>
+                        <button onclick="removeImage(${index})" class="danger-btn">Remove</button>
+                    </div>
+                `;
+                itemsContainer.appendChild(item);
+            });
+        }
+        
+        function selectImage(index) {
+            selectedImageIndex = index;
+            updateImageList();
+            drawOverlay();
+        }
+        
+        function removeImage(index) {
+            canvasImages.splice(index, 1);
+            if (selectedImageIndex === index) {
+                selectedImageIndex = -1;
+            } else if (selectedImageIndex > index) {
+                selectedImageIndex--;
+            }
+            updateImageList();
+            redrawCanvas();
+            drawOverlay();
+        }
+        
+        function updateTransform() {
+            if (!currentModel) return;
+            
+            currentModel.position.set(
+                parseFloat(document.getElementById('posX').value),
+                parseFloat(document.getElementById('posY').value),
+                parseFloat(document.getElementById('posZ').value)
+            );
+            currentModel.rotation.set(
+                parseFloat(document.getElementById('rotX').value),
+                parseFloat(document.getElementById('rotY').value),
+                parseFloat(document.getElementById('rotZ').value)
+            );
+            currentModel.scale.setScalar(parseFloat(document.getElementById('scale').value));
+        }
+        
+        function updateTransformControls() {
+            if (!currentModel) return;
+            
+            document.getElementById('posX').value = currentModel.position.x;
+            document.getElementById('posY').value = currentModel.position.y;
+            document.getElementById('posZ').value = currentModel.position.z;
+            document.getElementById('rotX').value = currentModel.rotation.x;
+            document.getElementById('rotY').value = currentModel.rotation.y;
+            document.getElementById('rotZ').value = currentModel.rotation.z;
+            document.getElementById('scale').value = currentModel.scale.x;
+        }
+        
+        function saveScene() {
+            // Save current material state
+            saveMaterialCanvas(currentMaterialIndex);
+            
+            // Prepare material states for serialization
+            const materialStates = {};
+            imageMaterials.forEach((matInfo, index) => {
+                const state = materialCanvasStates.get(matInfo.material);
+                if (state) {
+                    materialStates[index] = state;
+                }
+            });
+            
+            const sceneData = {
+                version: '2.0',
+                timestamp: new Date().toISOString(),
+                camera: {
+                    position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+                    target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+                },
+                model: currentModel ? {
+                    position: { x: currentModel.position.x, y: currentModel.position.y, z: currentModel.position.z },
+                    rotation: { x: currentModel.rotation.x, y: currentModel.rotation.y, z: currentModel.rotation.z },
+                    scale: { x: currentModel.scale.x, y: currentModel.scale.y, z: currentModel.scale.z }
+                } : null,
+                materials: {
+                    count: imageMaterials.length,
+                    current: currentMaterialIndex,
+                    states: materialStates
+                },
+                glb: currentGLBData
+            };
+            
+            const dataStr = JSON.stringify(sceneData, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportName = `scene-${new Date().toISOString().slice(0,10)}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportName);
+            linkElement.click();
+            
+            document.getElementById('sceneStatus').textContent = 'Scene saved successfully';
+        }
+        
+        function loadScene(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const sceneData = JSON.parse(e.target.result);
+                    
+                    // Load GLB
+                    if (sceneData.glb && sceneData.glb.data) {
+                        const blob = dataURItoBlob(sceneData.glb.data);
+                        const url = URL.createObjectURL(blob);
+                        currentGLBData = sceneData.glb;
+                        
+                        loader.load(url, (gltf) => {
+                            if (currentModel) scene.remove(currentModel);
+                            currentModel = gltf.scene;
+                            scene.add(currentModel);
+                            
+                            // Restore model transform
+                            if (sceneData.model) {
+                                currentModel.position.set(
+                                    sceneData.model.position.x,
+                                    sceneData.model.position.y,
+                                    sceneData.model.position.z
+                                );
+                                currentModel.rotation.set(
+                                    sceneData.model.rotation.x,
+                                    sceneData.model.rotation.y,
+                                    sceneData.model.rotation.z
+                                );
+                                currentModel.scale.set(
+                                    sceneData.model.scale.x,
+                                    sceneData.model.scale.y,
+                                    sceneData.model.scale.z
+                                );
+                            }
+                            
+                            // Find materials
+                            findImageMaterials();
+                            
+                            // Restore material states
+                            if (sceneData.materials && sceneData.materials.states) {
+                                Object.keys(sceneData.materials.states).forEach(indexStr => {
+                                    const index = parseInt(indexStr);
+                                    const state = sceneData.materials.states[indexStr];
+                                    if (index < imageMaterials.length) {
+                                        const material = imageMaterials[index].material;
+                                        materialCanvasStates.set(material, state);
+                                    }
+                                });
+                                
+                                currentMaterialIndex = sceneData.materials.current || 0;
+                                loadMaterialCanvas(currentMaterialIndex);
+                            }
+                            
+                            updateMaterialTabs();
+                            updateTransformControls();
+                            updateMaterialInfo();
+                            
+                            URL.revokeObjectURL(url);
+                        });
+                    }
+                    
+                    // Restore camera
+                    if (sceneData.camera) {
+                        camera.position.set(
+                            sceneData.camera.position.x,
+                            sceneData.camera.position.y,
+                            sceneData.camera.position.z
+                        );
+                        if (sceneData.camera.target) {
+                            controls.target.set(
+                                sceneData.camera.target.x,
+                                sceneData.camera.target.y,
+                                sceneData.camera.target.z
+                            );
+                        }
+                        controls.update();
+                    }
+                    
+                    document.getElementById('sceneStatus').textContent = 'Scene loaded successfully';
+                } catch (error) {
+                    console.error('Error loading scene:', error);
+                    document.getElementById('sceneStatus').textContent = 'Error loading scene';
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        function dataURItoBlob(dataURI) {
+            const byteString = atob(dataURI.split(',')[1]);
+            const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mimeString });
+        }
+        
+        function resetScene() {
+            if (currentModel) {
+                scene.remove(currentModel);
+                currentModel.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (child.material.map) child.material.map.dispose();
+                        child.material.dispose();
+                    }
+                });
+                currentModel = null;
+            }
+            
+            materialTextures.clear();
+            materialCanvasStates.clear();
+            imageMaterials = [];
+            currentMaterialIndex = 0;
+            canvasImages = [];
+            selectedImageIndex = -1;
+            currentGLBData = null;
+            
+            clearCanvas();
+            
+            // Reset controls
+            ['posX', 'posY', 'posZ', 'rotX', 'rotY', 'rotZ'].forEach(id => {
+                document.getElementById(id).value = 0;
+            });
+            document.getElementById('scale').value = 1;
+            
+            camera.position.set(0, 0, 5);
+            controls.target.set(0, 0, 0);
+            controls.update();
+            
+            updateMaterialTabs();
+            updateMaterialInfo();
+            document.getElementById('sceneStatus').textContent = 'Scene reset';
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            const container = document.querySelector('.viewer');
+            const rect = container.getBoundingClientRect();
+            renderer.setSize(rect.width, rect.height);
+            camera.aspect = rect.width / rect.height;
+            camera.updateProjectionMatrix();
+        });
+        
+        init();
+    </script>
+</body>
+</html>

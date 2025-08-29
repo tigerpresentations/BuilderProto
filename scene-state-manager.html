@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scene State Manager</title>
+    <style>
+        body { margin: 0; font-family: monospace; overflow: hidden; }
+        #controls { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); 
+                    padding: 15px; border-radius: 5px; color: white; }
+        button { margin: 5px; padding: 8px 12px; cursor: pointer; background: #4a90e2; 
+                 color: white; border: none; border-radius: 3px; }
+        button:hover { background: #357abd; }
+        #json-output { position: absolute; top: 10px; right: 10px; width: 400px; max-height: 90vh;
+                       background: rgba(0,0,0,0.9); color: #0f0; padding: 10px; 
+                       font-size: 11px; overflow-y: auto; display: none; white-space: pre; }
+        #status { margin-top: 10px; font-size: 12px; color: #0f0; }
+        #editor-panel { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.8);
+                        padding: 15px; border-radius: 5px; color: white; width: 300px; display: none; }
+        .editor-section { margin-bottom: 10px; }
+        .editor-section label { display: block; font-size: 11px; margin-bottom: 3px; }
+        input[type="range"] { width: 100%; }
+        input[type="color"] { width: 50px; height: 25px; }
+        .selected-outline { outline: 3px solid #ff8800 !important; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h3>Scene State Manager</h3>
+        <button id="save-btn">Save Design</button>
+        <button id="load-btn">Load Design</button>
+        <button id="reset-btn">Reset to Default</button>
+        <button id="clear-storage-btn">Clear Storage</button>
+        <button id="toggle-json-btn">Toggle JSON</button>
+        <div id="status"></div>
+    </div>
+    <div id="editor-panel">
+        <h4 id="selected-name">No object selected</h4>
+        <div class="editor-section">
+            <label>Color:</label>
+            <input type="color" id="color-input" value="#ffffff">
+        </div>
+        <div class="editor-section">
+            <label>Position X: <span id="pos-x-val">0</span></label>
+            <input type="range" id="pos-x" min="-5" max="5" step="0.1" value="0">
+            <label>Position Y: <span id="pos-y-val">0</span></label>
+            <input type="range" id="pos-y" min="-3" max="3" step="0.1" value="0">
+            <label>Position Z: <span id="pos-z-val">0</span></label>
+            <input type="range" id="pos-z" min="-5" max="5" step="0.1" value="0">
+        </div>
+        <div class="editor-section">
+            <label>Scale: <span id="scale-val">1.0</span></label>
+            <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1">
+        </div>
+        <div class="editor-section">
+            <label>Metalness: <span id="metalness-val">0</span></label>
+            <input type="range" id="metalness" min="0" max="1" step="0.1" value="0">
+            <label>Roughness: <span id="roughness-val">0</span></label>
+            <input type="range" id="roughness" min="0" max="1" step="0.1" value="0">
+        </div>
+    </div>
+    <div id="json-output"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        ambientLight.name = 'ambientLight';
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true;
+        directionalLight.name = 'directionalLight';
+        scene.add(directionalLight);
+        
+        // Create texture for demonstration
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 128, 128);
+        gradient.addColorStop(0, '#ff0000');
+        gradient.addColorStop(1, '#00ff00');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 128, 128);
+        const texture = new THREE.CanvasTexture(canvas);
+        
+        // Scene objects
+        let sceneObjects = [];
+        let selectedObject = null;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        function createDefaultScene() {
+            // Clear existing objects
+            sceneObjects.forEach(obj => {
+                scene.remove(obj);
+                obj.geometry?.dispose();
+                obj.material?.dispose();
+            });
+            sceneObjects = [];
+            
+            // Cube with texture
+            const cube = new THREE.Mesh(
+                new THREE.BoxGeometry(1, 1, 1),
+                new THREE.MeshStandardMaterial({ map: texture, metalness: 0.3, roughness: 0.7 })
+            );
+            cube.position.set(-2, 0, 0);
+            cube.rotation.set(0.5, 0.5, 0);
+            cube.castShadow = true;
+            cube.receiveShadow = true;
+            cube.name = 'cube';
+            cube.userData = { type: 'interactive', id: 'cube-001', created: Date.now() };
+            scene.add(cube);
+            sceneObjects.push(cube);
+            
+            // Sphere with metallic material
+            const sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(0.7, 32, 16),
+                new THREE.MeshStandardMaterial({ color: 0x4a90e2, metalness: 0.8, roughness: 0.2 })
+            );
+            sphere.position.set(2, 0, 0);
+            sphere.scale.set(1.2, 1.2, 1.2);
+            sphere.castShadow = true;
+            sphere.name = 'sphere';
+            sphere.userData = { type: 'decorative', id: 'sphere-001', material: 'metallic' };
+            scene.add(sphere);
+            sceneObjects.push(sphere);
+            
+            // Plane as ground
+            const plane = new THREE.Mesh(
+                new THREE.PlaneGeometry(10, 10),
+                new THREE.MeshStandardMaterial({ color: 0x404040, roughness: 1 })
+            );
+            plane.rotation.x = -Math.PI / 2;
+            plane.position.y = -1;
+            plane.receiveShadow = true;
+            plane.name = 'ground';
+            plane.userData = { type: 'environment', id: 'ground-001' };
+            scene.add(plane);
+            sceneObjects.push(plane);
+            
+            // Torus with emissive material
+            const torus = new THREE.Mesh(
+                new THREE.TorusGeometry(0.5, 0.2, 16, 32),
+                new THREE.MeshStandardMaterial({ 
+                    color: 0xff00ff, 
+                    emissive: 0xff00ff, 
+                    emissiveIntensity: 0.3,
+                    metalness: 0.5,
+                    roughness: 0.5
+                })
+            );
+            torus.position.set(0, 1.5, -1);
+            torus.rotation.set(0.3, 0.6, 0.9);
+            torus.castShadow = true;
+            torus.name = 'torus';
+            torus.userData = { type: 'special', id: 'torus-001', glow: true };
+            scene.add(torus);
+            sceneObjects.push(torus);
+        }
+        
+        // Serialization functions
+        function serializeVector3(vector) {
+            return [vector.x, vector.y, vector.z];
+        }
+        
+        function serializeColor(color) {
+            return color.getHexString();
+        }
+        
+        function serializeMaterial(material) {
+            const data = {
+                type: material.type,
+                color: material.color ? serializeColor(material.color) : null,
+                metalness: material.metalness,
+                roughness: material.roughness,
+                opacity: material.opacity,
+                transparent: material.transparent,
+                emissive: material.emissive ? serializeColor(material.emissive) : null,
+                emissiveIntensity: material.emissiveIntensity
+            };
+            
+            if (material.map) {
+                data.texture = material.map.image.toDataURL('image/jpeg', 0.85);
+            }
+            
+            return data;
+        }
+        
+        function serializeObject(obj) {
+            return {
+                name: obj.name,
+                type: obj.geometry?.type || 'unknown',
+                position: serializeVector3(obj.position),
+                rotation: serializeVector3(obj.rotation),
+                scale: serializeVector3(obj.scale),
+                visible: obj.visible,
+                castShadow: obj.castShadow,
+                receiveShadow: obj.receiveShadow,
+                material: serializeMaterial(obj.material),
+                userData: obj.userData,
+                geometryParams: obj.geometry?.parameters || {}
+            };
+        }
+        
+        function serializeScene() {
+            const sceneData = {
+                version: '1.0',
+                timestamp: Date.now(),
+                camera: {
+                    position: serializeVector3(camera.position),
+                    rotation: serializeVector3(camera.rotation),
+                    target: serializeVector3(controls.target)
+                },
+                lights: {
+                    ambient: {
+                        color: serializeColor(ambientLight.color),
+                        intensity: ambientLight.intensity
+                    },
+                    directional: {
+                        color: serializeColor(directionalLight.color),
+                        intensity: directionalLight.intensity,
+                        position: serializeVector3(directionalLight.position)
+                    }
+                },
+                objects: sceneObjects.map(serializeObject),
+                environment: {
+                    background: serializeColor(scene.background)
+                }
+            };
+            
+            return sceneData;
+        }
+        
+        // Deserialization functions
+        function deserializeVector3(arr, target) {
+            target.set(arr[0], arr[1], arr[2]);
+        }
+        
+        function deserializeMaterial(data) {
+            const material = new THREE.MeshStandardMaterial();
+            
+            if (data.color) material.color.setHex('0x' + data.color);
+            if (data.metalness !== undefined) material.metalness = data.metalness;
+            if (data.roughness !== undefined) material.roughness = data.roughness;
+            if (data.opacity !== undefined) material.opacity = data.opacity;
+            if (data.transparent !== undefined) material.transparent = data.transparent;
+            if (data.emissive) {
+                material.emissive.setHex('0x' + data.emissive);
+                material.emissiveIntensity = data.emissiveIntensity || 0;
+            }
+            
+            if (data.texture) {
+                const img = new Image();
+                img.onload = () => {
+                    material.map = new THREE.Texture(img);
+                    material.map.needsUpdate = true;
+                    material.needsUpdate = true;
+                };
+                img.src = data.texture;
+            }
+            
+            material.needsUpdate = true;
+            return material;
+        }
+        
+        function createGeometry(type, params) {
+            const geometries = {
+                'BoxGeometry': () => new THREE.BoxGeometry(params.width, params.height, params.depth),
+                'SphereGeometry': () => new THREE.SphereGeometry(params.radius, params.widthSegments, params.heightSegments),
+                'PlaneGeometry': () => new THREE.PlaneGeometry(params.width, params.height),
+                'TorusGeometry': () => new THREE.TorusGeometry(params.radius, params.tube, params.radialSegments, params.tubularSegments)
+            };
+            return geometries[type] ? geometries[type]() : new THREE.BoxGeometry(1, 1, 1);
+        }
+        
+        function deserializeScene(data) {
+            // CRITICAL: Clear selection state first to prevent interference
+            clearSelection();
+            
+            // Clear current scene
+            sceneObjects.forEach(obj => {
+                scene.remove(obj);
+                obj.geometry?.dispose();
+                obj.material?.dispose();
+            });
+            sceneObjects = [];
+            
+            // Restore camera
+            deserializeVector3(data.camera.position, camera.position);
+            deserializeVector3(data.camera.rotation, camera.rotation);
+            deserializeVector3(data.camera.target, controls.target);
+            controls.update();
+            
+            // Restore lights
+            ambientLight.color.set('#' + data.lights.ambient.color);
+            ambientLight.intensity = data.lights.ambient.intensity;
+            directionalLight.color.set('#' + data.lights.directional.color);
+            directionalLight.intensity = data.lights.directional.intensity;
+            deserializeVector3(data.lights.directional.position, directionalLight.position);
+            
+            // Restore objects
+            data.objects.forEach(objData => {
+                const geometry = createGeometry(objData.type, objData.geometryParams);
+                const material = deserializeMaterial(objData.material);
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                mesh.name = objData.name;
+                deserializeVector3(objData.position, mesh.position);
+                deserializeVector3(objData.rotation, mesh.rotation);
+                deserializeVector3(objData.scale, mesh.scale);
+                mesh.visible = objData.visible;
+                mesh.castShadow = objData.castShadow;
+                mesh.receiveShadow = objData.receiveShadow;
+                mesh.userData = objData.userData;
+                
+                scene.add(mesh);
+                sceneObjects.push(mesh);
+            });
+            
+            // Restore environment
+            scene.background.set('#' + data.environment.background);
+        }
+        
+        // UI handlers
+        const status = document.getElementById('status');
+        const jsonOutput = document.getElementById('json-output');
+        
+        document.getElementById('save-btn').addEventListener('click', () => {
+            const sceneData = serializeScene();
+            localStorage.setItem('sceneState', JSON.stringify(sceneData));
+            jsonOutput.textContent = JSON.stringify(sceneData, null, 2);
+            status.textContent = `Saved to localStorage (${(JSON.stringify(sceneData).length / 1024).toFixed(1)} KB)`;
+        });
+        
+        document.getElementById('load-btn').addEventListener('click', () => {
+            const saved = localStorage.getItem('sceneState');
+            if (saved) {
+                try {
+                    const sceneData = JSON.parse(saved);
+                    deserializeScene(sceneData);
+                    status.textContent = 'Scene loaded successfully';
+                    jsonOutput.textContent = JSON.stringify(sceneData, null, 2);
+                } catch (e) {
+                    status.textContent = 'Error loading scene: ' + e.message;
+                }
+            } else {
+                status.textContent = 'No saved scene found';
+            }
+        });
+        
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            clearSelection();
+            createDefaultScene();
+            camera.position.set(5, 5, 5);
+            controls.target.set(0, 0, 0);
+            controls.update();
+            status.textContent = 'Reset to default scene';
+        });
+        
+        document.getElementById('clear-storage-btn').addEventListener('click', () => {
+            localStorage.removeItem('sceneState');
+            status.textContent = 'Storage cleared';
+        });
+        
+        document.getElementById('toggle-json-btn').addEventListener('click', () => {
+            jsonOutput.style.display = jsonOutput.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        // Object selection
+        function clearSelection() {
+            if (selectedObject) {
+                // Restore original emissive if stored
+                if (selectedObject.userData.originalEmissive) {
+                    selectedObject.material.emissive.setHex('0x' + selectedObject.userData.originalEmissive.color);
+                    selectedObject.material.emissiveIntensity = selectedObject.userData.originalEmissive.intensity;
+                } else {
+                    selectedObject.material.emissive.setHex(0x000000);
+                    selectedObject.material.emissiveIntensity = 0;
+                }
+                selectedObject.material.needsUpdate = true;
+            }
+            selectedObject = null;
+            document.getElementById('editor-panel').style.display = 'none';
+        }
+        
+        function selectObject(obj) {
+            clearSelection();
+            
+            selectedObject = obj;
+            if (obj) {
+                // Store original emissive before highlighting
+                if (!obj.userData.originalEmissive) {
+                    obj.userData.originalEmissive = {
+                        color: obj.material.emissive.getHexString(),
+                        intensity: obj.material.emissiveIntensity || 0
+                    };
+                }
+                obj.material.emissive.setHex(0x333333);
+                obj.material.needsUpdate = true;
+                document.getElementById('editor-panel').style.display = 'block';
+                document.getElementById('selected-name').textContent = obj.name;
+                
+                // Update controls
+                document.getElementById('color-input').value = '#' + obj.material.color.getHexString();
+                document.getElementById('pos-x').value = obj.position.x;
+                document.getElementById('pos-y').value = obj.position.y;
+                document.getElementById('pos-z').value = obj.position.z;
+                document.getElementById('scale').value = obj.scale.x;
+                document.getElementById('metalness').value = obj.material.metalness || 0;
+                document.getElementById('roughness').value = obj.material.roughness || 0;
+                
+                updateValueDisplays();
+            }
+        }
+        
+        function updateValueDisplays() {
+            if (!selectedObject) return;
+            document.getElementById('pos-x-val').textContent = selectedObject.position.x.toFixed(1);
+            document.getElementById('pos-y-val').textContent = selectedObject.position.y.toFixed(1);
+            document.getElementById('pos-z-val').textContent = selectedObject.position.z.toFixed(1);
+            document.getElementById('scale-val').textContent = selectedObject.scale.x.toFixed(1);
+            document.getElementById('metalness-val').textContent = (selectedObject.material.metalness || 0).toFixed(1);
+            document.getElementById('roughness-val').textContent = (selectedObject.material.roughness || 0).toFixed(1);
+        }
+        
+        // Mouse click selection
+        renderer.domElement.addEventListener('click', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(sceneObjects);
+            
+            if (intersects.length > 0) {
+                selectObject(intersects[0].object);
+            } else {
+                clearSelection();
+            }
+        });
+        
+        // Property editors
+        document.getElementById('color-input').addEventListener('input', (e) => {
+            if (selectedObject) {
+                selectedObject.material.color.setHex(e.target.value.replace('#', '0x'));
+            }
+        });
+        
+        ['pos-x', 'pos-y', 'pos-z'].forEach((id, index) => {
+            document.getElementById(id).addEventListener('input', (e) => {
+                if (selectedObject) {
+                    selectedObject.position.setComponent(index, parseFloat(e.target.value));
+                    updateValueDisplays();
+                }
+            });
+        });
+        
+        document.getElementById('scale').addEventListener('input', (e) => {
+            if (selectedObject) {
+                const scale = parseFloat(e.target.value);
+                selectedObject.scale.set(scale, scale, scale);
+                updateValueDisplays();
+            }
+        });
+        
+        document.getElementById('metalness').addEventListener('input', (e) => {
+            if (selectedObject) {
+                selectedObject.material.metalness = parseFloat(e.target.value);
+                updateValueDisplays();
+            }
+        });
+        
+        document.getElementById('roughness').addEventListener('input', (e) => {
+            if (selectedObject) {
+                selectedObject.material.roughness = parseFloat(e.target.value);
+                updateValueDisplays();
+            }
+        });
+        
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate objects for visual interest (only non-selected ones)
+            sceneObjects.forEach((obj, i) => {
+                if (obj.name !== 'ground' && obj !== selectedObject) {
+                    obj.rotation.y += 0.002 * (i + 1);
+                }
+            });
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize
+        createDefaultScene();
+        
+        // Try to load saved state on startup
+        const saved = localStorage.getItem('sceneState');
+        if (saved) {
+            try {
+                deserializeScene(JSON.parse(saved));
+                status.textContent = 'Loaded previous session';
+            } catch (e) {
+                createDefaultScene();
+            }
+        }
+        
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        animate();
+    </script>
+</body>
+</html>

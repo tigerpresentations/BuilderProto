@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLB Scene Editor</title>
+    <style>
+        body { margin: 0; font-family: monospace; overflow: hidden; }
+        #drop-zone { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; 
+                      background: rgba(0,0,0,0.9); color: white; font-size: 24px; z-index: 100; }
+        #drop-zone.dragging { background: rgba(0,100,0,0.9); }
+        #drop-zone.hidden { display: none; }
+        #controls { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); 
+                    padding: 15px; border-radius: 5px; color: white; min-width: 250px; }
+        button { margin: 5px; padding: 8px 12px; cursor: pointer; background: #4a90e2; 
+                 color: white; border: none; border-radius: 3px; }
+        button:hover { background: #357abd; }
+        #canvas-editor { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8);
+                         padding: 15px; border-radius: 5px; color: white; display: none; }
+        #drawing-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
+        #canvas-controls { margin-top: 10px; }
+        input[type="color"] { width: 40px; height: 25px; margin: 5px; }
+        input[type="file"] { margin: 5px 0; }
+        #model-controls { margin-top: 15px; border-top: 1px solid #444; padding-top: 15px; display: none; }
+        .control-group { margin: 10px 0; }
+        .control-group label { display: block; font-size: 11px; margin-bottom: 3px; }
+        input[type="range"] { width: 100%; }
+        #status { margin-top: 10px; font-size: 12px; color: #0f0; }
+    </style>
+</head>
+<body>
+    <div id="drop-zone">Drag & Drop GLB File</div>
+    
+    <div id="controls">
+        <h3>GLB Scene Editor</h3>
+        <div class="control-group">
+            <label>Background Color:</label>
+            <input type="color" id="bg-color" value="#1a1a1a">
+        </div>
+        <button id="clear-model-btn" style="display:none;">Remove Model</button>
+        <div id="status">Drop a GLB file to begin</div>
+        
+        <div id="model-controls">
+            <h4>Model Controls</h4>
+            <div class="control-group">
+                <label>Position X: <span id="pos-x-val">0</span></label>
+                <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
+                <label>Position Z: <span id="pos-z-val">0</span></label>
+                <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
+            </div>
+            <div class="control-group">
+                <label>Scale: <span id="scale-val">1.0</span></label>
+                <input type="range" id="scale" min="0.1" max="5" step="0.1" value="1">
+            </div>
+            <div class="control-group">
+                <label>Rotation Y: <span id="rot-y-val">0°</span></label>
+                <input type="range" id="rot-y" min="0" max="360" step="5" value="0">
+            </div>
+            <button id="toggle-canvas-btn">Show Canvas Editor</button>
+        </div>
+    </div>
+    
+    <div id="canvas-editor">
+        <h4>Texture Editor</h4>
+        <canvas id="drawing-canvas" width="256" height="256"></canvas>
+        <div id="canvas-controls">
+            <input type="color" id="brush-color" value="#ff0000" title="Brush Color">
+            <input type="file" id="image-upload" accept="image/*" title="Upload Image">
+            <button id="clear-canvas-btn">Clear</button>
+            <button id="hide-canvas-btn">Hide</button>
+        </div>
+        <div style="font-size: 11px; color: #aaa; margin-top: 10px;">
+            Draw or upload images to texture "Image" materials
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+        
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI * 0.8; // Prevent viewing from underground
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.setScalar(2048);
+        scene.add(directionalLight);
+        
+        // Floor plane
+        const floorGeometry = new THREE.PlaneGeometry(20, 20);
+        const floorMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x808080, 
+            roughness: 0.8,
+            metalness: 0.1 
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.01;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // GLB loader and canvas setup
+        const loader = new THREE.GLTFLoader();
+        let currentModel = null;
+        let imageMaterials = [];
+        let canvasTexture = null;
+        
+        // Canvas texture setup
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        
+        // Initialize canvas with white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        
+        function createCanvasTexture() {
+            if (canvasTexture) canvasTexture.dispose();
+            canvasTexture = new THREE.CanvasTexture(canvas);
+            canvasTexture.flipY = false;
+            canvasTexture.magFilter = THREE.LinearFilter;
+            canvasTexture.minFilter = THREE.LinearFilter;
+            canvasTexture.generateMipmaps = false;
+            return canvasTexture;
+        }
+        
+        function placeModelOnFloor(model) {
+            // Clear previous model
+            if (currentModel) {
+                cleanupModel(currentModel);
+                scene.remove(currentModel);
+            }
+            
+            currentModel = model;
+            scene.add(model);
+            
+            // Calculate bounding box for floor placement
+            model.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            // Center the model horizontally and place on floor
+            model.position.x = -center.x;
+            model.position.z = -center.z;
+            model.position.y = -box.min.y;
+            
+            // Auto-scale if too large
+            const maxDimension = Math.max(size.x, size.y, size.z);
+            if (maxDimension > 8) {
+                const scale = 8 / maxDimension;
+                model.scale.setScalar(scale);
+            }
+            
+            // Find and store "Image" materials
+            imageMaterials = [];
+            model.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const matName = child.material.name || '';
+                    if (matName.toLowerCase().includes('image')) {
+                        imageMaterials.push(child.material);
+                        // Apply canvas texture
+                        child.material.map = createCanvasTexture();
+                        child.material.needsUpdate = true;
+                    }
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+            
+            // Update UI
+            document.getElementById('clear-model-btn').style.display = 'block';
+            document.getElementById('model-controls').style.display = 'block';
+            document.getElementById('status').textContent = `Loaded model (${imageMaterials.length} Image materials found)`;
+            
+            // Reset sliders to current values
+            updateSliders();
+            
+            // Focus camera on model
+            const modelCenter = new THREE.Vector3();
+            box.getCenter(modelCenter);
+            modelCenter.y = size.y * 0.5;
+            controls.target.copy(modelCenter);
+            
+            const distance = Math.max(size.x, size.y, size.z) * 2;
+            camera.position.set(distance, distance * 0.7, distance);
+            controls.update();
+        }
+        
+        function cleanupModel(model) {
+            model.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (child.material.map && child.material.map !== canvasTexture) {
+                        child.material.map.dispose();
+                    }
+                    child.material.dispose();
+                }
+            });
+        }
+        
+        function updateSliders() {
+            if (!currentModel) return;
+            
+            document.getElementById('pos-x').value = currentModel.position.x;
+            document.getElementById('pos-z').value = currentModel.position.z;
+            document.getElementById('scale').value = currentModel.scale.x;
+            document.getElementById('rot-y').value = (currentModel.rotation.y * 180 / Math.PI) % 360;
+            
+            updateValueDisplays();
+        }
+        
+        function updateValueDisplays() {
+            if (!currentModel) return;
+            
+            document.getElementById('pos-x-val').textContent = currentModel.position.x.toFixed(1);
+            document.getElementById('pos-z-val').textContent = currentModel.position.z.toFixed(1);
+            document.getElementById('scale-val').textContent = currentModel.scale.x.toFixed(1);
+            document.getElementById('rot-y-val').textContent = Math.round(currentModel.rotation.y * 180 / Math.PI) + '°';
+        }
+        
+        // Drag and drop handling
+        const dropZone = document.getElementById('drop-zone');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); });
+        });
+        
+        document.addEventListener('dragenter', () => dropZone.classList.add('dragging'));
+        document.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+        
+        document.addEventListener('drop', (e) => {
+            dropZone.classList.remove('dragging');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.toLowerCase().endsWith('.glb')) {
+                dropZone.classList.add('hidden');
+                loadGLBFile(file);
+            }
+        });
+        
+        function loadGLBFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                loader.parse(e.target.result, '', (gltf) => {
+                    placeModelOnFloor(gltf.scene);
+                }, (error) => {
+                    console.error('Error loading GLB:', error);
+                    document.getElementById('status').textContent = 'Error loading GLB file';
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // Canvas drawing
+        canvas.addEventListener('pointerdown', (e) => {
+            isDrawing = true;
+            ctx.strokeStyle = document.getElementById('brush-color').value;
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+        
+        canvas.addEventListener('pointermove', (e) => {
+            if (!isDrawing) return;
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            
+            if (canvasTexture) {
+                canvasTexture.needsUpdate = true;
+            }
+        });
+        
+        canvas.addEventListener('pointerup', () => isDrawing = false);
+        canvas.addEventListener('pointerleave', () => isDrawing = false);
+        
+        // Image upload to canvas
+        document.getElementById('image-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const img = new Image();
+                img.onload = () => {
+                    // Clear canvas and draw image
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, 256, 256);
+                    
+                    // Scale image to fit canvas
+                    const scale = Math.min(256 / img.width, 256 / img.height);
+                    const width = img.width * scale;
+                    const height = img.height * scale;
+                    const x = (256 - width) / 2;
+                    const y = (256 - height) / 2;
+                    
+                    ctx.drawImage(img, x, y, width, height);
+                    
+                    if (canvasTexture) {
+                        canvasTexture.needsUpdate = true;
+                    }
+                };
+                img.src = URL.createObjectURL(file);
+            }
+        });
+        
+        // UI event handlers
+        document.getElementById('bg-color').addEventListener('input', (e) => {
+            scene.background.setHex(e.target.value.replace('#', '0x'));
+        });
+        
+        document.getElementById('clear-model-btn').addEventListener('click', () => {
+            if (currentModel) {
+                cleanupModel(currentModel);
+                scene.remove(currentModel);
+                currentModel = null;
+                imageMaterials = [];
+                
+                document.getElementById('clear-model-btn').style.display = 'none';
+                document.getElementById('model-controls').style.display = 'none';
+                document.getElementById('status').textContent = 'Drop a GLB file to begin';
+                dropZone.classList.remove('hidden');
+            }
+        });
+        
+        document.getElementById('clear-canvas-btn').addEventListener('click', () => {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, 256, 256);
+            if (canvasTexture) canvasTexture.needsUpdate = true;
+        });
+        
+        document.getElementById('toggle-canvas-btn').addEventListener('click', () => {
+            const editor = document.getElementById('canvas-editor');
+            editor.style.display = editor.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        document.getElementById('hide-canvas-btn').addEventListener('click', () => {
+            document.getElementById('canvas-editor').style.display = 'none';
+        });
+        
+        // Model control sliders
+        ['pos-x', 'pos-z'].forEach((id, index) => {
+            document.getElementById(id).addEventListener('input', (e) => {
+                if (currentModel) {
+                    const coord = index === 0 ? 'x' : 'z';
+                    currentModel.position[coord] = parseFloat(e.target.value);
+                    updateValueDisplays();
+                }
+            });
+        });
+        
+        document.getElementById('scale').addEventListener('input', (e) => {
+            if (currentModel) {
+                const scale = parseFloat(e.target.value);
+                currentModel.scale.set(scale, scale, scale);
+                updateValueDisplays();
+            }
+        });
+        
+        document.getElementById('rot-y').addEventListener('input', (e) => {
+            if (currentModel) {
+                currentModel.rotation.y = parseFloat(e.target.value) * Math.PI / 180;
+                updateValueDisplays();
+            }
+        });
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Initialize
+        createCanvasTexture();
+        animate();
+    </script>
+</body>
+</html>

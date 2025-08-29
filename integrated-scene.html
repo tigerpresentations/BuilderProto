@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Integrated 3D Scene Editor</title>
+    <style>
+        body { margin: 0; padding: 10px; font-family: Arial; display: flex; }
+        .viewer { flex: 1; position: relative; }
+        .sidebar { width: 350px; padding: 20px; background: #f5f5f5; overflow-y: auto; height: calc(100vh - 20px); }
+        .control-group { margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: white; }
+        .control-group h4 { margin: 0 0 10px 0; color: #333; }
+        button { padding: 8px 15px; margin: 5px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; }
+        .primary-btn { background: #007bff; color: white; border: none; }
+        .success-btn { background: #28a745; color: white; border: none; }
+        .danger-btn { background: #dc3545; color: white; border: none; }
+        input[type="range"] { width: 100%; }
+        input[type="color"] { width: 50px; }
+        input[type="file"] { margin: 5px 0; }
+        .canvas-editor { background: #f8f9fa; padding: 10px; border-radius: 4px; }
+        .canvas-controls { margin: 10px 0; }
+        #drawCanvas { border: 1px solid #ccc; cursor: crosshair; display: block; margin: 10px 0; }
+        .material-info { background: #e8f5e9; padding: 8px; border-radius: 3px; margin: 5px 0; font-size: 12px; }
+        .json-output { background: #f8f9fa; padding: 10px; border: 1px solid #ddd; 
+                      max-height: 150px; overflow-y: auto; font-family: monospace; 
+                      font-size: 10px; white-space: pre-wrap; }
+        
+        /* Notification system styles */
+        .notification {
+            position: fixed; top: 20px; right: 20px;
+            padding: 12px 20px; border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000; transition: all 0.3s;
+            font-weight: bold; max-width: 300px;
+        }
+        .notification.success { background: #28a745; color: white; }
+        .notification.error { background: #dc3545; color: white; }
+        .notification.info { background: #007bff; color: white; }
+        .notification.warning { background: #ffc107; color: #212529; }
+        .notification.fade-out { opacity: 0; transform: translateX(100%); }
+    </style>
+</head>
+<body>
+    <div class="viewer">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+    
+    <div class="sidebar">
+        <div class="control-group">
+            <h4>Model & Image Upload</h4>
+            <input type="file" id="glbUpload" accept=".glb,.gltf">
+            <button class="primary-btn" onclick="document.getElementById('glbUpload').click()">Load GLB Model</button>
+            <div id="materialInfo" class="material-info">No model loaded</div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Image Editor</h4>
+            <div class="canvas-editor">
+                <div class="canvas-controls">
+                    <input type="color" id="colorPicker" value="#ff0000">
+                    <input type="range" id="brushSize" min="1" max="20" value="5" title="Brush Size">
+                    <button onclick="clearCanvas()">Clear</button>
+                    <button onclick="document.getElementById('imageUpload').click()">Load Image</button>
+                    <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                </div>
+                <div id="imageControls" style="display: none; margin: 10px 0; padding: 10px; background: #fff; border-radius: 3px;">
+                    <label>Scale: <input type="range" id="imageScale" min="0.1" max="3" step="0.1" value="1" oninput="updateImage()"></label>
+                    <label>X: <input type="range" id="imageX" min="-128" max="128" step="1" value="0" oninput="updateImage()"></label>
+                    <label>Y: <input type="range" id="imageY" min="-128" max="128" step="1" value="0" oninput="updateImage()"></label>
+                    <button onclick="resetImageTransform()">Reset</button>
+                    <button onclick="applyImageToCanvas()">Apply</button>
+                </div>
+                <canvas id="drawCanvas" width="256" height="256"></canvas>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Object Transform</h4>
+            <label>Position X: <input type="range" id="posX" min="-5" max="5" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Position Y: <input type="range" id="posY" min="-5" max="5" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Position Z: <input type="range" id="posZ" min="-5" max="5" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Rotation X: <input type="range" id="rotX" min="0" max="6.28" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Rotation Y: <input type="range" id="rotY" min="0" max="6.28" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Rotation Z: <input type="range" id="rotZ" min="0" max="6.28" step="0.1" value="0" oninput="updateTransform()"></label>
+            <label>Scale: <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1" oninput="updateTransform()"></label>
+        </div>
+        
+        <div class="control-group">
+            <h4>Scene Management</h4>
+            <button class="success-btn" onclick="saveScene()">Download Scene</button>
+            <button class="primary-btn" onclick="document.getElementById('sceneUpload').click()">Load Scene</button>
+            <input type="file" id="sceneUpload" accept=".json" style="display: none;">
+            <button class="danger-btn" onclick="resetScene()">Reset Scene</button>
+            <div id="sceneStatus" style="font-size: 12px; margin-top: 5px;">Ready</div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Scene Data</h4>
+            <div id="jsonOutput" class="json-output">No scene data</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Core Three.js setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: document.getElementById('mainCanvas'),
+            antialias: true,
+            alpha: true
+        });
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        const loader = new THREE.GLTFLoader();
+        
+        // Scene state
+        let currentModel = null;
+        let imageMaterial = null;
+        let canvasTexture = null;
+        let needsTextureUpdate = false;
+        let sceneState = null;
+        let currentGLBData = null;
+        
+        // Smart rendering state
+        let needsRender = true;
+        let lastRenderTime = 0;
+        const targetFPS = 60;
+        const frameInterval = 1000 / targetFPS;
+        
+        // Canvas setup
+        const drawCanvas = document.getElementById('drawCanvas');
+        const ctx = drawCanvas.getContext('2d');
+        const colorPicker = document.getElementById('colorPicker');
+        const brushSize = document.getElementById('brushSize');
+        
+        // Drawing state
+        let isDrawing = false;
+        let lastX = 0, lastY = 0;
+        
+        // Image state for resizing
+        let loadedImage = null;
+        let imageTransform = { scale: 1, x: 0, y: 0 };
+        let drawingData = null; // Store drawing data when manipulating image
+        
+        // Notification system
+        function showNotification(message, type = 'info', duration = 3000) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('fade-out');
+                setTimeout(() => {
+                    if (document.body.contains(notification)) {
+                        document.body.removeChild(notification);
+                    }
+                }, 300);
+            }, duration);
+        }
+        
+        function markNeedsRender() {
+            needsRender = true;
+        }
+        
+        function init() {
+            // Setup renderer with improved quality
+            const container = document.querySelector('.viewer');
+            const rect = container.getBoundingClientRect();
+            renderer.setSize(rect.width, rect.height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = false;  // Disable shadows for cleaner look
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            camera.aspect = rect.width / rect.height;
+            camera.updateProjectionMatrix();
+            
+            // Set scene background to neutral gray
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // Setup improved lighting for clarity
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);  // Increased ambient for less harsh shadows
+            scene.add(ambientLight);
+            
+            // Add multiple directional lights for even illumination
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight1.position.set(5, 10, 5);
+            scene.add(directionalLight1);
+            
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight2.position.set(-5, 5, -5);
+            scene.add(directionalLight2);
+            
+            // Add hemisphere light for natural lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xf0f0f0, 0.6);
+            hemiLight.position.set(0, 20, 0);
+            scene.add(hemiLight);
+            
+            // Setup camera
+            camera.position.set(0, 0, 5);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Initialize canvas
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+            
+            // Try to load default GLB if it exists
+            fetch('91x91.glb')
+                .then(response => {
+                    if (response.ok) {
+                        loadGLB('91x91.glb');
+                    }
+                })
+                .catch(() => {
+                    console.log('Default GLB not found, starting with empty scene');
+                });
+            
+            setupEventListeners();
+            animate();
+        }
+        
+        function setupEventListeners() {
+            // GLB upload
+            document.getElementById('glbUpload').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    const file = e.target.files[0];
+                    const url = URL.createObjectURL(file);
+                    
+                    // Store file data for serialization
+                    const reader = new FileReader();
+                    reader.onload = (readerEvent) => {
+                        currentGLBData = {
+                            name: file.name,
+                            data: readerEvent.target.result
+                        };
+                        loadGLB(url);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            // Image upload
+            document.getElementById('imageUpload').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    loadImageToCanvas(e.target.files[0]);
+                }
+            });
+            
+            // Scene upload
+            document.getElementById('sceneUpload').addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    loadScene(e.target.files[0]);
+                }
+            });
+            
+            // Drawing events
+            drawCanvas.addEventListener('mousedown', startDrawing);
+            drawCanvas.addEventListener('mousemove', draw);
+            drawCanvas.addEventListener('mouseup', stopDrawing);
+            drawCanvas.addEventListener('mouseout', stopDrawing);
+        }
+        
+        function loadGLB(url) {
+            showNotification('Loading 3D model...', 'info', 2000);
+            
+            loader.load(url, (gltf) => {
+                // Remove existing model
+                if (currentModel) {
+                    scene.remove(currentModel);
+                    // Dispose of old geometry and materials
+                    currentModel.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (child.material.map && child.material.map !== canvasTexture) child.material.map.dispose();
+                            child.material.dispose();
+                        }
+                    });
+                }
+                
+                currentModel = gltf.scene;
+                scene.add(currentModel);
+                
+                // Center and scale model
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                
+                currentModel.position.sub(center);
+                
+                // Find Image material
+                findImageMaterial();
+                
+                // Update controls
+                updateTransformControls();
+                updateMaterialInfo();
+                markNeedsRender();
+                
+                document.getElementById('sceneStatus').textContent = 'GLB loaded successfully';
+                showNotification('✓ 3D model loaded successfully', 'success', 3000);
+            }, undefined, (error) => {
+                console.error('Error loading GLB:', error);
+                document.getElementById('sceneStatus').textContent = 'Error loading GLB';
+                showNotification('Error loading 3D model: ' + error.message, 'error', 5000);
+            });
+        }
+        
+        function findImageMaterial() {
+            imageMaterial = null;
+            
+            currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const material = child.material;
+                    const materialName = material.name || '';
+                    
+                    // Improve material rendering quality
+                    if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) {
+                        material.roughness = material.roughness || 0.5;
+                        material.metalness = material.metalness || 0.0;
+                    }
+                    
+                    // Case-insensitive check for 'image' in material name
+                    if (materialName.toLowerCase() === 'image' || materialName.toLowerCase().includes('image')) {
+                        imageMaterial = material;
+                        
+                        // If the material already has a texture map, ensure flipY is set correctly
+                        if (material.map) {
+                            material.map.flipY = true;
+                            material.map.needsUpdate = true;
+                        }
+                        
+                        setupCanvasTexture();
+                        return;
+                    }
+                }
+            });
+        }
+        
+        function setupCanvasTexture() {
+            if (imageMaterial) {
+                canvasTexture = new THREE.CanvasTexture(drawCanvas);
+                canvasTexture.generateMipmaps = true;  // Enable mipmaps for better quality at distance
+                canvasTexture.minFilter = THREE.LinearMipmapLinearFilter;  // Better filtering
+                canvasTexture.magFilter = THREE.LinearFilter;
+                canvasTexture.flipY = false;  // CanvasTexture should typically be false for GLB models
+                canvasTexture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());  // Limited anisotropic filtering for performance
+                canvasTexture.wrapS = THREE.ClampToEdgeWrapping;  // Prevent texture wrapping artifacts
+                canvasTexture.wrapT = THREE.ClampToEdgeWrapping;
+                canvasTexture.format = THREE.RGBAFormat;
+                canvasTexture.type = THREE.UnsignedByteType;
+                
+                imageMaterial.map = canvasTexture;
+                imageMaterial.needsUpdate = true;
+                needsTextureUpdate = true;
+                markNeedsRender();
+                
+                showNotification('✓ Canvas texture applied to material', 'success', 2000);
+            }
+        }
+        
+        function updateMaterialInfo() {
+            const info = document.getElementById('materialInfo');
+            if (imageMaterial) {
+                info.textContent = `✅ Image material found: ${imageMaterial.name}`;
+                info.style.backgroundColor = '#e8f5e9';
+            } else {
+                info.textContent = '❌ No "Image" material found in model';
+                info.style.backgroundColor = '#ffebee';
+            }
+        }
+        
+        function startDrawing(e) {
+            isDrawing = true;
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+        }
+        
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = colorPicker.value;
+            ctx.lineWidth = brushSize.value;
+            ctx.lineCap = 'round';
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+            needsTextureUpdate = true;
+            markNeedsRender();
+        }
+        
+        function stopDrawing() {
+            isDrawing = false;
+        }
+        
+        function clearCanvas() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+            needsTextureUpdate = true;
+            markNeedsRender();
+            loadedImage = null;
+            document.getElementById('imageControls').style.display = 'none';
+            showNotification('Canvas cleared', 'info', 1500);
+        }
+        
+        function loadImageToCanvas(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    loadedImage = img;
+                    
+                    // Reset transform values
+                    imageTransform = { scale: 1, x: 0, y: 0 };
+                    document.getElementById('imageScale').value = 1;
+                    document.getElementById('imageX').value = 0;
+                    document.getElementById('imageY').value = 0;
+                    
+                    // Show image controls
+                    document.getElementById('imageControls').style.display = 'block';
+                    
+                    // Initial draw with auto-fit
+                    const autoScale = Math.min(drawCanvas.width / img.width, drawCanvas.height / img.height);
+                    imageTransform.scale = autoScale;
+                    document.getElementById('imageScale').value = autoScale;
+                    
+                    updateImage();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function updateImage() {
+            if (!loadedImage) return;
+            
+            // Store current drawing if exists
+            if (!drawingData) {
+                drawingData = ctx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+            }
+            
+            // Clear and redraw
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+            
+            // Get transform values
+            imageTransform.scale = parseFloat(document.getElementById('imageScale').value);
+            imageTransform.x = parseFloat(document.getElementById('imageX').value);
+            imageTransform.y = parseFloat(document.getElementById('imageY').value);
+            
+            // Calculate dimensions and position
+            const width = loadedImage.width * imageTransform.scale;
+            const height = loadedImage.height * imageTransform.scale;
+            const x = (drawCanvas.width - width) / 2 + imageTransform.x;
+            const y = (drawCanvas.height - height) / 2 + imageTransform.y;
+            
+            // Draw image with transforms
+            ctx.drawImage(loadedImage, x, y, width, height);
+            needsTextureUpdate = true;
+            markNeedsRender();
+        }
+        
+        function resetImageTransform() {
+            if (!loadedImage) return;
+            
+            const autoScale = Math.min(drawCanvas.width / loadedImage.width, drawCanvas.height / loadedImage.height);
+            imageTransform = { scale: autoScale, x: 0, y: 0 };
+            document.getElementById('imageScale').value = autoScale;
+            document.getElementById('imageX').value = 0;
+            document.getElementById('imageY').value = 0;
+            
+            updateImage();
+        }
+        
+        function applyImageToCanvas() {
+            // Apply the current image state and hide controls
+            drawingData = null; // Reset drawing data since we're applying the image
+            loadedImage = null; // Clear the loaded image reference
+            document.getElementById('imageControls').style.display = 'none';
+        }
+        
+        function updateTransform() {
+            if (!currentModel) return;
+            
+            const posX = document.getElementById('posX').value;
+            const posY = document.getElementById('posY').value;
+            const posZ = document.getElementById('posZ').value;
+            const rotX = document.getElementById('rotX').value;
+            const rotY = document.getElementById('rotY').value;
+            const rotZ = document.getElementById('rotZ').value;
+            const scale = document.getElementById('scale').value;
+            
+            currentModel.position.set(parseFloat(posX), parseFloat(posY), parseFloat(posZ));
+            currentModel.rotation.set(parseFloat(rotX), parseFloat(rotY), parseFloat(rotZ));
+            currentModel.scale.setScalar(parseFloat(scale));
+            markNeedsRender();
+        }
+        
+        function updateTransformControls() {
+            if (!currentModel) return;
+            
+            document.getElementById('posX').value = currentModel.position.x;
+            document.getElementById('posY').value = currentModel.position.y;
+            document.getElementById('posZ').value = currentModel.position.z;
+            document.getElementById('rotX').value = currentModel.rotation.x;
+            document.getElementById('rotY').value = currentModel.rotation.y;
+            document.getElementById('rotZ').value = currentModel.rotation.z;
+            document.getElementById('scale').value = currentModel.scale.x;
+        }
+        
+        // Helper function to detect canvas transparency
+        function canvasHasTransparency(canvas) {
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] < 255) return true;
+            }
+            return false;
+        }
+        
+        // Helper function to compress canvas data
+        function getOptimizedCanvasData(canvas) {
+            const hasTransparency = canvasHasTransparency(canvas);
+            const format = hasTransparency ? 'image/png' : 'image/jpeg';
+            const quality = hasTransparency ? undefined : 0.85;
+            
+            return canvas.toDataURL(format, quality);
+        }
+        
+        function saveScene() {
+            try {
+                showNotification('Saving scene...', 'info', 1000);
+                
+                const canvasDataURL = getOptimizedCanvasData(drawCanvas);
+                
+                const sceneData = {
+                    version: '2.1',
+                    timestamp: new Date().toISOString(),
+                    metadata: {
+                        appVersion: '1.0',
+                        canvasSize: { width: drawCanvas.width, height: drawCanvas.height },
+                        hasTransparency: canvasHasTransparency(drawCanvas)
+                    },
+                    camera: {
+                        position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+                        target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+                    },
+                    model: currentModel ? {
+                        position: { x: currentModel.position.x, y: currentModel.position.y, z: currentModel.position.z },
+                        rotation: { x: currentModel.rotation.x, y: currentModel.rotation.y, z: currentModel.rotation.z },
+                        scale: { x: currentModel.scale.x, y: currentModel.scale.y, z: currentModel.scale.z }
+                    } : null,
+                    texture: {
+                        canvasData: canvasDataURL,
+                        hasImageMaterial: !!imageMaterial,
+                        compressionUsed: !canvasHasTransparency(drawCanvas)
+                    },
+                    glb: currentGLBData
+                };
+                
+                const dataStr = JSON.stringify(sceneData, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                const exportName = `scene-${new Date().toISOString().slice(0,10)}.json`;
+                
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportName);
+                linkElement.click();
+                
+                document.getElementById('jsonOutput').textContent = dataStr;
+                document.getElementById('sceneStatus').textContent = 'Scene saved successfully';
+                
+                // Show file size info
+                const fileSizeKB = Math.round(dataStr.length / 1024);
+                showNotification(`✓ Scene saved (${fileSizeKB}KB)`, 'success', 3000);
+                
+            } catch (error) {
+                console.error('Error saving scene:', error);
+                document.getElementById('sceneStatus').textContent = 'Error saving scene';
+                showNotification('Error saving scene: ' + error.message, 'error', 5000);
+            }
+        }
+        
+        function loadScene(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const sceneData = JSON.parse(e.target.result);
+                    
+                    // Restore GLB if present
+                    if (sceneData.glb && sceneData.glb.data) {
+                        const blob = dataURItoBlob(sceneData.glb.data);
+                        const url = URL.createObjectURL(blob);
+                        currentGLBData = sceneData.glb;
+                        
+                        loader.load(url, (gltf) => {
+                            if (currentModel) scene.remove(currentModel);
+                            currentModel = gltf.scene;
+                            scene.add(currentModel);
+                            
+                            // Restore model transform
+                            if (sceneData.model) {
+                                currentModel.position.set(
+                                    sceneData.model.position.x,
+                                    sceneData.model.position.y,
+                                    sceneData.model.position.z
+                                );
+                                currentModel.rotation.set(
+                                    sceneData.model.rotation.x,
+                                    sceneData.model.rotation.y,
+                                    sceneData.model.rotation.z
+                                );
+                                currentModel.scale.set(
+                                    sceneData.model.scale.x,
+                                    sceneData.model.scale.y,
+                                    sceneData.model.scale.z
+                                );
+                            }
+                            
+                            findImageMaterial();
+                            updateTransformControls();
+                            updateMaterialInfo();
+                            
+                            // Restore canvas texture
+                            if (sceneData.texture && sceneData.texture.canvasData) {
+                                const img = new Image();
+                                img.onload = () => {
+                                    ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+                                    ctx.drawImage(img, 0, 0);
+                                    needsTextureUpdate = true;
+                                };
+                                img.src = sceneData.texture.canvasData;
+                            }
+                            
+                            URL.revokeObjectURL(url);
+                        }, undefined, (error) => {
+                            console.error('Error loading saved GLB:', error);
+                            document.getElementById('sceneStatus').textContent = 'Error loading saved model';
+                            URL.revokeObjectURL(url);
+                        });
+                    }
+                    
+                    // Restore camera
+                    if (sceneData.camera) {
+                        camera.position.set(
+                            sceneData.camera.position.x,
+                            sceneData.camera.position.y,
+                            sceneData.camera.position.z
+                        );
+                        if (sceneData.camera.target) {
+                            controls.target.set(
+                                sceneData.camera.target.x,
+                                sceneData.camera.target.y,
+                                sceneData.camera.target.z
+                            );
+                        }
+                        controls.update();
+                    }
+                    
+                    document.getElementById('jsonOutput').textContent = JSON.stringify(sceneData, null, 2);
+                    document.getElementById('sceneStatus').textContent = 'Scene loaded successfully';
+                    
+                } catch (error) {
+                    console.error('Error loading scene:', error);
+                    document.getElementById('sceneStatus').textContent = 'Error loading scene';
+                }
+            };
+            reader.readAsText(file);
+        }
+        
+        function dataURItoBlob(dataURI) {
+            const byteString = atob(dataURI.split(',')[1]);
+            const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mimeString });
+        }
+        
+        function resetScene() {
+            if (currentModel) {
+                scene.remove(currentModel);
+                // Properly dispose of resources
+                currentModel.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (child.material.map && child.material.map !== canvasTexture) child.material.map.dispose();
+                        child.material.dispose();
+                    }
+                });
+                currentModel = null;
+            }
+            imageMaterial = null;
+            canvasTexture = null;
+            currentGLBData = null;
+            
+            clearCanvas();
+            
+            // Reset controls
+            ['posX', 'posY', 'posZ', 'rotX', 'rotY', 'rotZ'].forEach(id => {
+                document.getElementById(id).value = 0;
+            });
+            document.getElementById('scale').value = 1;
+            
+            camera.position.set(0, 0, 5);
+            controls.target.set(0, 0, 0);
+            controls.update();
+            
+            updateMaterialInfo();
+            document.getElementById('jsonOutput').textContent = 'Scene reset';
+            document.getElementById('sceneStatus').textContent = 'Scene reset';
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const currentTime = performance.now();
+            
+            // Update texture if needed
+            if (needsTextureUpdate && canvasTexture) {
+                canvasTexture.needsUpdate = true;
+                needsTextureUpdate = false;
+                markNeedsRender();
+            }
+            
+            // Check if controls changed (camera moved)
+            if (controls.update()) {
+                markNeedsRender();
+            }
+            
+            // Smart rendering - only render when needed and respect frame rate
+            if (needsRender && currentTime - lastRenderTime >= frameInterval) {
+                renderer.render(scene, camera);
+                needsRender = false;
+                lastRenderTime = currentTime;
+            }
+        }
+        
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            const container = document.querySelector('.viewer');
+            const rect = container.getBoundingClientRect();
+            renderer.setSize(rect.width, rect.height);
+            renderer.setPixelRatio(window.devicePixelRatio);  // Maintain pixel ratio on resize
+            camera.aspect = rect.width / rect.height;
+            camera.updateProjectionMatrix();
+        });
+        
+        init();
+    </script>
+</body>
+</html>
