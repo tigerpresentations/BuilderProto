@@ -15,9 +15,12 @@
         button { margin: 5px; padding: 8px 12px; cursor: pointer; background: #4a90e2; 
                  color: white; border: none; border-radius: 3px; }
         button:hover { background: #357abd; }
-        #canvas-editor { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8);
-                         padding: 15px; border-radius: 5px; color: white; display: none; }
-        #drawing-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
+        #canvas-editor { position: fixed; top: 10px; right: 10px; bottom: 10px; 
+                         width: calc(100vw - 20px - 300px); max-width: 600px; min-width: 350px;
+                         background: rgba(0,0,0,0.8); padding: 15px; border-radius: 5px; 
+                         color: white; display: none; overflow: hidden; }
+        #display-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
+        #texture-canvas { display: none; } /* Hidden - used only for texture generation */
         .quality-info { font-size: 10px; color: #888; margin-top: 5px; }
         #canvas-controls { margin-top: 10px; }
         input[type="color"] { width: 40px; height: 25px; margin: 5px; }
@@ -27,6 +30,10 @@
         .control-group label { display: block; font-size: 11px; margin-bottom: 3px; }
         input[type="range"] { width: 100%; }
         input[type="checkbox"] { margin-right: 8px; }
+        .mode-btn { margin: 2px; padding: 5px 10px; border: 1px solid #666; background: #333; color: white; cursor: pointer; }
+        .mode-btn.active { background: #4a90e2; border-color: #357abd; }
+        .mode-btn:disabled { background: #222; color: #666; cursor: not-allowed; }
+        #draw-tools { margin: 5px 0; }
         #status { margin-top: 10px; font-size: 12px; color: #0f0; }
         #performance-info { font-size: 10px; color: #888; margin-top: 5px; }
     </style>
@@ -71,10 +78,19 @@
     
     <div id="canvas-editor">
         <h4>High-Resolution Texture Editor</h4>
-        <canvas id="drawing-canvas" width="1024" height="1024"></canvas>
+        <canvas id="display-canvas" width="512" height="512" style="max-width: 100%; max-height: calc(100vh - 200px); height: auto; width: auto;"></canvas>
+        <canvas id="texture-canvas" width="1024" height="1024"></canvas>
         <div id="canvas-controls">
-            <input type="color" id="brush-color" value="#ff0000" title="Brush Color">
-            <input type="file" id="image-upload" accept="image/*" title="Upload Image">
+            <div id="mode-controls" style="margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 10px;">
+                <button id="draw-mode-btn" class="mode-btn">✏️ Draw</button>
+                <button id="select-mode-btn" class="mode-btn active">🔲 Select</button>
+            </div>
+            <div id="draw-tools">
+                <input type="color" id="brush-color" value="#ff0000" title="Brush Color">
+            </div>
+            <div id="image-tools">
+                <input type="file" id="image-upload" accept="image/*" title="Upload Image">
+            </div>
             <button id="clear-canvas-btn">Clear</button>
             <button id="hide-canvas-btn">Hide</button>
         </div>
@@ -136,18 +152,317 @@
         let imageMaterials = [];
         let canvasTexture = null;
         
-        // High-resolution canvas setup optimized for 1024x1024
-        const canvas = document.getElementById('drawing-canvas');
-        const ctx = canvas.getContext('2d', {
-            alpha: false,  // Better performance for opaque textures
-            desynchronized: true,  // Reduce input lag
-            willReadFrequently: false  // Optimize for drawing
+        // Dual-canvas setup: display (768x768) + texture (1024x1024)
+        const displayCanvas = document.getElementById('display-canvas');
+        const textureCanvas = document.getElementById('texture-canvas');
+        
+        const displayCtx = displayCanvas.getContext('2d', {
+            alpha: false,
+            desynchronized: true,
+            willReadFrequently: false
         });
+        
+        const textureCtx = textureCanvas.getContext('2d', {
+            alpha: false,
+            desynchronized: true, 
+            willReadFrequently: false
+        });
+        
+        // Legacy compatibility - keep existing canvas reference for texture generation
+        const canvas = textureCanvas;
+        const ctx = textureCtx;
         let isDrawing = false;
         let targetQuality = 1024;
         let currentQuality = 1024;
         let lastTextureUpdate = 0;
         const UPDATE_THROTTLE = 16; // Max 60fps texture updates
+        
+        // Interaction state for layer manipulation
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragLayer = null;
+        let dragStartLayerX = 0;
+        let dragStartLayerY = 0;
+        
+        // Resize handle state
+        let isResizing = false;
+        let resizeHandle = null; // 'nw', 'ne', 'sw', 'se', 'n', 'e', 's', 'w', 'rotate'
+        let resizeStartBounds = null;
+        
+        // Rotation state
+        let isRotating = false;
+        let rotationStartAngle = 0;
+        
+        // Handle types and cursors
+        const HANDLES = {
+            'nw': { cursor: 'nw-resize' },
+            'ne': { cursor: 'ne-resize' },
+            'sw': { cursor: 'sw-resize' },
+            'se': { cursor: 'se-resize' },
+            'n': { cursor: 'n-resize' },
+            'e': { cursor: 'e-resize' },
+            's': { cursor: 's-resize' },
+            'w': { cursor: 'w-resize' },
+            'rotate': { cursor: 'grab' }
+        };
+        
+        // Mode management
+        let currentMode = 'SELECT'; // DRAW, SELECT - default to SELECT
+        const MODES = { DRAW: 'DRAW', SELECT: 'SELECT' };
+        
+        // Layer system
+        class ImageLayer {
+            constructor(image, options = {}) {
+                this.id = 'layer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                this.image = image;
+                this.x = options.x || 0;
+                this.y = options.y || 0;
+                this.scaleX = options.scaleX || 1;
+                this.scaleY = options.scaleY || 1;
+                this.rotation = options.rotation || 0;
+                this.opacity = options.opacity || 1;
+                this.visible = options.visible !== false;
+                this.selected = false;
+                this.originalWidth = image.width;
+                this.originalHeight = image.height;
+            }
+            
+            // Get transformed bounds for hit testing
+            getBounds() {
+                const width = this.originalWidth * this.scaleX;
+                const height = this.originalHeight * this.scaleY;
+                return {
+                    left: this.x - width/2,
+                    top: this.y - height/2,
+                    right: this.x + width/2,
+                    bottom: this.y + height/2,
+                    width: width,
+                    height: height
+                };
+            }
+            
+            // Get resize handles for this layer (8 handles around the bounds)
+            getResizeHandles() {
+                const bounds = this.getBounds();
+                const handleSize = 8;
+                const half = handleSize / 2;
+                const rotateRadius = 6;
+                
+                return {
+                    'nw': { x: bounds.left - half, y: bounds.top - half, width: handleSize, height: handleSize },
+                    'ne': { x: bounds.right - half, y: bounds.top - half, width: handleSize, height: handleSize },
+                    'sw': { x: bounds.left - half, y: bounds.bottom - half, width: handleSize, height: handleSize },
+                    'se': { x: bounds.right - half, y: bounds.bottom - half, width: handleSize, height: handleSize },
+                    'n': { x: bounds.left + bounds.width/2 - half, y: bounds.top - half, width: handleSize, height: handleSize },
+                    'e': { x: bounds.right - half, y: bounds.top + bounds.height/2 - half, width: handleSize, height: handleSize },
+                    's': { x: bounds.left + bounds.width/2 - half, y: bounds.bottom - half, width: handleSize, height: handleSize },
+                    'w': { x: bounds.left - half, y: bounds.top + bounds.height/2 - half, width: handleSize, height: handleSize },
+                    'rotate': { 
+                        x: bounds.left + bounds.width/2 - rotateRadius, 
+                        y: bounds.top - 25 - rotateRadius, 
+                        width: rotateRadius * 2, 
+                        height: rotateRadius * 2 
+                    }
+                };
+            }
+            
+            // Check if point hits a resize handle
+            getHandleAt(x, y) {
+                if (!this.selected) return null;
+                
+                const handles = this.getResizeHandles();
+                for (const [handleType, handle] of Object.entries(handles)) {
+                    if (x >= handle.x && x <= handle.x + handle.width &&
+                        y >= handle.y && y <= handle.y + handle.height) {
+                        return handleType;
+                    }
+                }
+                return null;
+            }
+            
+            // Check if point is inside this layer
+            hitTest(x, y) {
+                const bounds = this.getBounds();
+                return x >= bounds.left && x <= bounds.right && 
+                       y >= bounds.top && y <= bounds.bottom;
+            }
+        }
+        
+        class LayerManager {
+            constructor() {
+                this.layers = [];
+                this.selectedLayer = null;
+            }
+            
+            addLayer(layer) {
+                this.layers.push(layer);
+                this.renderLayers();
+                return layer;
+            }
+            
+            removeLayer(layerId) {
+                const index = this.layers.findIndex(l => l.id === layerId);
+                if (index >= 0) {
+                    this.layers.splice(index, 1);
+                    this.renderLayers();
+                    return true;
+                }
+                return false;
+            }
+            
+            selectLayer(layerId) {
+                // Deselect all layers
+                this.layers.forEach(layer => layer.selected = false);
+                
+                // Select specific layer
+                if (layerId) {
+                    const layer = this.layers.find(l => l.id === layerId);
+                    if (layer) {
+                        layer.selected = true;
+                        this.selectedLayer = layer;
+                        return layer;
+                    }
+                }
+                this.selectedLayer = null;
+                return null;
+            }
+            
+            getLayerAt(x, y) {
+                // Check layers from top to bottom (reverse order)
+                for (let i = this.layers.length - 1; i >= 0; i--) {
+                    if (this.layers[i].visible && this.layers[i].hitTest(x, y)) {
+                        return this.layers[i];
+                    }
+                }
+                return null;
+            }
+            
+            // Get resize handle at position (checks selected layer only)
+            getResizeHandleAt(x, y) {
+                if (!this.selectedLayer) return null;
+                return this.selectedLayer.getHandleAt(x, y);
+            }
+            
+            clearLayers() {
+                this.layers = [];
+                this.selectedLayer = null;
+                this.renderLayers();
+            }
+            
+            renderLayers() {
+                this.renderToCanvas(displayCtx, 512);
+                this.renderToCanvas(textureCtx, currentQuality);
+                throttledTextureUpdate();
+            }
+            
+            renderToCanvas(ctx, size) {
+                // Clear canvas
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, size, size);
+                
+                // Render each layer
+                this.layers.forEach(layer => {
+                    if (!layer.visible) return;
+                    
+                    ctx.save();
+                    ctx.globalAlpha = layer.opacity;
+                    
+                    // Transform for this canvas size
+                    const scaleRatio = size / 512; // Normalize to display size
+                    const x = layer.x * scaleRatio;
+                    const y = layer.y * scaleRatio;
+                    const width = layer.originalWidth * layer.scaleX * scaleRatio;
+                    const height = layer.originalHeight * layer.scaleY * scaleRatio;
+                    
+                    // Apply transformations
+                    ctx.translate(x, y);
+                    if (layer.rotation) {
+                        ctx.rotate(layer.rotation);
+                    }
+                    
+                    // Draw image centered at transform origin
+                    ctx.drawImage(layer.image, -width/2, -height/2, width, height);
+                    
+                    // Draw selection outline and handles on display canvas only (not on texture)
+                    if (layer.selected && ctx === displayCtx) {
+                        ctx.strokeStyle = '#ff8800';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(-width/2, -height/2, width, height);
+                        ctx.setLineDash([]); // Reset line dash
+                        
+                        // Draw resize handles
+                        ctx.fillStyle = '#ff8800';
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 1;
+                        
+                        const handleSize = 8;
+                        const half = handleSize / 2;
+                        
+                        // Corner handles
+                        const corners = [
+                            [-width/2 - half, -height/2 - half], // nw
+                            [width/2 - half, -height/2 - half],  // ne
+                            [-width/2 - half, height/2 - half],  // sw
+                            [width/2 - half, height/2 - half]    // se
+                        ];
+                        
+                        // Edge handles
+                        const edges = [
+                            [0 - half, -height/2 - half],  // n
+                            [width/2 - half, 0 - half],    // e
+                            [0 - half, height/2 - half],   // s
+                            [-width/2 - half, 0 - half]    // w
+                        ];
+                        
+                        [...corners, ...edges].forEach(([hx, hy]) => {
+                            ctx.fillRect(hx, hy, handleSize, handleSize);
+                            ctx.strokeRect(hx, hy, handleSize, handleSize);
+                        });
+                        
+                        // Rotation handle - circle above the top edge
+                        const rotateHandleX = 0;
+                        const rotateHandleY = -height/2 - 25;
+                        const rotateRadius = 6;
+                        
+                        ctx.fillStyle = '#4488ff';
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(rotateHandleX, rotateHandleY, rotateRadius, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.stroke();
+                        
+                        // Line connecting rotation handle to object
+                        ctx.strokeStyle = '#4488ff';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -height/2);
+                        ctx.lineTo(rotateHandleX, rotateHandleY + rotateRadius);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.restore();
+                });
+            }
+        }
+        
+        // Initialize layer manager
+        const layerManager = new LayerManager();
+        
+        // Coordinate transformation helpers
+        function displayToTexture(displayCoord) {
+            return displayCoord * (currentQuality / 512);
+        }
+        
+        function drawToCanvases(drawOperation) {
+            // Draw on display canvas for immediate visual feedback
+            drawOperation(displayCtx, 1.0); // 1:1 scale for display
+            
+            // Mirror to texture canvas with coordinate scaling
+            const scale = currentQuality / 512;
+            drawOperation(textureCtx, scale);
+        }
         
         // Performance monitoring
         let performanceMonitor = { 
@@ -192,21 +507,31 @@
         
         function initializeCanvas(size = currentQuality) {
             currentQuality = size;
-            canvas.width = size;
-            canvas.height = size;
-            canvas.style.width = '256px';  // Display size stays consistent
-            canvas.style.height = '256px';
             
-            // Optimized canvas initialization
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, size, size);
-            ctx.lineWidth = Math.max(4, size / 170); // Optimal brush scaling
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+            // Initialize texture canvas (for Three.js)
+            textureCanvas.width = size;
+            textureCanvas.height = size;
             
-            // Enhanced drawing settings
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
+            // Initialize display canvas (for user interaction)
+            displayCanvas.width = 512;
+            displayCanvas.height = 512;
+            
+            // Initialize both canvases with white background
+            textureCtx.fillStyle = 'white';
+            textureCtx.fillRect(0, 0, size, size);
+            textureCtx.lineWidth = Math.max(4, size / 170);
+            textureCtx.lineCap = 'round';
+            textureCtx.lineJoin = 'round';
+            textureCtx.imageSmoothingEnabled = true;
+            textureCtx.imageSmoothingQuality = 'high';
+            
+            displayCtx.fillStyle = 'white';
+            displayCtx.fillRect(0, 0, 512, 512);
+            displayCtx.lineWidth = Math.max(3, 512 / 170); // Scale for display
+            displayCtx.lineCap = 'round';
+            displayCtx.lineJoin = 'round';
+            displayCtx.imageSmoothingEnabled = true;
+            displayCtx.imageSmoothingQuality = 'high';
             
             // Update info display
             const memoryEstimate = ((size * size * 3) / 1024).toFixed(0); // RGB format
@@ -216,7 +541,7 @@
         
         function createCanvasTexture() {
             if (canvasTexture) canvasTexture.dispose();
-            canvasTexture = new THREE.CanvasTexture(canvas);
+            canvasTexture = new THREE.CanvasTexture(textureCanvas);  // Always use texture canvas
             
             // Aggressive optimization for high-resolution
             canvasTexture.format = THREE.RGBFormat; // Save 25% memory
@@ -431,23 +756,280 @@
             reader.readAsArrayBuffer(file);
         }
         
-        // Canvas drawing events
-        canvas.addEventListener('pointerdown', (e) => {
-            isDrawing = true;
-            ctx.strokeStyle = document.getElementById('brush-color').value;
-            ctx.beginPath();
-            ctx.moveTo(e.offsetX, e.offsetY);
+        // Mode management functions
+        function setMode(newMode) {
+            currentMode = newMode;
+            
+            // Update UI
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            
+            if (newMode === MODES.DRAW) {
+                document.getElementById('draw-mode-btn').classList.add('active');
+                displayCanvas.style.cursor = 'crosshair';
+                document.getElementById('draw-tools').style.display = 'block';
+            } else if (newMode === MODES.SELECT) {
+                document.getElementById('select-mode-btn').classList.add('active');
+                displayCanvas.style.cursor = 'default';
+                document.getElementById('draw-tools').style.display = 'none';
+            }
+            
+            // Image tools always visible
+            document.getElementById('image-tools').style.display = 'block';
+        }
+        
+        // Canvas drawing events - only active in DRAW mode
+        displayCanvas.addEventListener('pointerdown', (e) => {
+            if (currentMode === MODES.DRAW) {
+                isDrawing = true;
+                const color = document.getElementById('brush-color').value;
+                
+                drawToCanvases((ctx, scale) => {
+                    ctx.strokeStyle = color;
+                    ctx.beginPath();
+                    ctx.moveTo(e.offsetX * scale, e.offsetY * scale);
+                });
+            } else if (currentMode === MODES.SELECT) {
+                // First check if clicking on a resize handle
+                const handle = layerManager.getResizeHandleAt(e.offsetX, e.offsetY);
+                if (handle) {
+                    if (handle === 'rotate') {
+                        // Start rotating
+                        isRotating = true;
+                        const layer = layerManager.selectedLayer;
+                        const bounds = layer.getBounds();
+                        const centerX = bounds.left + bounds.width / 2;
+                        const centerY = bounds.top + bounds.height / 2;
+                        rotationStartAngle = Math.atan2(e.offsetY - centerY, e.offsetX - centerX);
+                        dragStartX = e.offsetX;
+                        dragStartY = e.offsetY;
+                        displayCanvas.style.cursor = 'grabbing';
+                    } else {
+                        // Start resizing
+                        isResizing = true;
+                        resizeHandle = handle;
+                        dragStartX = e.offsetX;
+                        dragStartY = e.offsetY;
+                        resizeStartBounds = layerManager.selectedLayer.getBounds();
+                        displayCanvas.style.cursor = HANDLES[handle].cursor;
+                    }
+                } else {
+                    // Check if clicking on a layer for dragging
+                    const layer = layerManager.getLayerAt(e.offsetX, e.offsetY);
+                    if (layer) {
+                        // Start dragging this layer
+                        isDragging = true;
+                        dragLayer = layer;
+                        dragStartX = e.offsetX;
+                        dragStartY = e.offsetY;
+                        dragStartLayerX = layer.x;
+                        dragStartLayerY = layer.y;
+                        
+                        // Select the layer if not already selected
+                        layerManager.selectLayer(layer.id);
+                        layerManager.renderLayers(); // Immediate render to show selection
+                        displayCanvas.style.cursor = 'move';
+                    }
+                }
+            }
         });
         
-        canvas.addEventListener('pointermove', (e) => {
-            if (!isDrawing) return;
-            ctx.lineTo(e.offsetX, e.offsetY);
-            ctx.stroke();
-            throttledTextureUpdate();
+        displayCanvas.addEventListener('pointermove', (e) => {
+            if (currentMode === MODES.DRAW && isDrawing) {
+                drawToCanvases((ctx, scale) => {
+                    ctx.lineTo(e.offsetX * scale, e.offsetY * scale);
+                    ctx.stroke();
+                });
+                throttledTextureUpdate();
+            } else if (currentMode === MODES.SELECT) {
+                if (isRotating && layerManager.selectedLayer) {
+                    // Handle rotation
+                    const layer = layerManager.selectedLayer;
+                    const bounds = layer.getBounds();
+                    const centerX = bounds.left + bounds.width / 2;
+                    const centerY = bounds.top + bounds.height / 2;
+                    const currentAngle = Math.atan2(e.offsetY - centerY, e.offsetX - centerX);
+                    layer.rotation += currentAngle - rotationStartAngle;
+                    rotationStartAngle = currentAngle;
+                    layerManager.renderLayers();
+                } else if (isResizing && layerManager.selectedLayer) {
+                    // Handle resizing
+                    const layer = layerManager.selectedLayer;
+                    const startBounds = resizeStartBounds;
+                    
+                    // Get current mouse position
+                    const currentX = e.offsetX;
+                    const currentY = e.offsetY;
+                    
+                    let newScaleX = layer.scaleX;
+                    let newScaleY = layer.scaleY;
+                    let newX = layer.x;
+                    let newY = layer.y;
+                    
+                    // Corner handles - resize from opposite corner with aspect ratio
+                    if (['nw', 'ne', 'sw', 'se'].includes(resizeHandle)) {
+                        let anchorX, anchorY;
+                        
+                        // Determine anchor point (opposite corner)
+                        switch (resizeHandle) {
+                            case 'nw': anchorX = startBounds.right; anchorY = startBounds.bottom; break;
+                            case 'ne': anchorX = startBounds.left; anchorY = startBounds.bottom; break;
+                            case 'sw': anchorX = startBounds.right; anchorY = startBounds.top; break;
+                            case 'se': anchorX = startBounds.left; anchorY = startBounds.top; break;
+                        }
+                        
+                        // Calculate distance from anchor to mouse
+                        const newWidth = Math.abs(currentX - anchorX);
+                        const newHeight = Math.abs(currentY - anchorY);
+                        
+                        // Maintain aspect ratio - use the smaller scale
+                        const scaleFromWidth = newWidth / layer.originalWidth;
+                        const scaleFromHeight = newHeight / layer.originalHeight;
+                        const newScale = Math.max(0.1, Math.min(scaleFromWidth, scaleFromHeight));
+                        
+                        newScaleX = newScale;
+                        newScaleY = newScale;
+                        
+                        // Position center between anchor and new corner
+                        const scaledWidth = layer.originalWidth * newScale;
+                        const scaledHeight = layer.originalHeight * newScale;
+                        
+                        if (resizeHandle === 'nw') {
+                            newX = anchorX - scaledWidth / 2;
+                            newY = anchorY - scaledHeight / 2;
+                        } else if (resizeHandle === 'ne') {
+                            newX = anchorX + scaledWidth / 2;
+                            newY = anchorY - scaledHeight / 2;
+                        } else if (resizeHandle === 'sw') {
+                            newX = anchorX - scaledWidth / 2;
+                            newY = anchorY + scaledHeight / 2;
+                        } else if (resizeHandle === 'se') {
+                            newX = anchorX + scaledWidth / 2;
+                            newY = anchorY + scaledHeight / 2;
+                        }
+                    }
+                    // Edge handles - resize only in one dimension from opposite edge
+                    else if (['n', 's', 'e', 'w'].includes(resizeHandle)) {
+                        if (resizeHandle === 'e') {
+                            // Resize width from left edge
+                            const newWidth = currentX - startBounds.left;
+                            newScaleX = Math.max(0.1, newWidth / layer.originalWidth);
+                            newX = startBounds.left + (layer.originalWidth * newScaleX) / 2;
+                        } else if (resizeHandle === 'w') {
+                            // Resize width from right edge
+                            const newWidth = startBounds.right - currentX;
+                            newScaleX = Math.max(0.1, newWidth / layer.originalWidth);
+                            newX = startBounds.right - (layer.originalWidth * newScaleX) / 2;
+                        } else if (resizeHandle === 's') {
+                            // Resize height from top edge
+                            const newHeight = currentY - startBounds.top;
+                            newScaleY = Math.max(0.1, newHeight / layer.originalHeight);
+                            newY = startBounds.top + (layer.originalHeight * newScaleY) / 2;
+                        } else if (resizeHandle === 'n') {
+                            // Resize height from bottom edge
+                            const newHeight = startBounds.bottom - currentY;
+                            newScaleY = Math.max(0.1, newHeight / layer.originalHeight);
+                            newY = startBounds.bottom - (layer.originalHeight * newScaleY) / 2;
+                        }
+                    }
+                    
+                    // Apply changes
+                    layer.scaleX = newScaleX;
+                    layer.scaleY = newScaleY;
+                    layer.x = newX;
+                    layer.y = newY;
+                    
+                    layerManager.renderLayers();
+                } else if (isDragging && dragLayer) {
+                    // Update layer position based on drag
+                    const deltaX = e.offsetX - dragStartX;
+                    const deltaY = e.offsetY - dragStartY;
+                    
+                    dragLayer.x = dragStartLayerX + deltaX;
+                    dragLayer.y = dragStartLayerY + deltaY;
+                    
+                    // Re-render with new position
+                    layerManager.renderLayers();
+                } else {
+                    // Update cursor based on what's under mouse
+                    const handle = layerManager.getResizeHandleAt(e.offsetX, e.offsetY);
+                    if (handle) {
+                        displayCanvas.style.cursor = HANDLES[handle].cursor;
+                    } else {
+                        const layer = layerManager.getLayerAt(e.offsetX, e.offsetY);
+                        displayCanvas.style.cursor = layer ? 'pointer' : 'default';
+                    }
+                }
+            }
         });
         
-        canvas.addEventListener('pointerup', () => isDrawing = false);
-        canvas.addEventListener('pointerleave', () => isDrawing = false);
+        displayCanvas.addEventListener('pointerup', (e) => {
+            if (currentMode === MODES.DRAW) {
+                isDrawing = false;
+            } else if (currentMode === MODES.SELECT) {
+                if (isRotating) {
+                    // End rotation
+                    isRotating = false;
+                    displayCanvas.style.cursor = 'default';
+                } else if (isResizing) {
+                    // End resizing
+                    isResizing = false;
+                    resizeHandle = null;
+                    resizeStartBounds = null;
+                    displayCanvas.style.cursor = 'default';
+                } else if (isDragging) {
+                    // End dragging
+                    isDragging = false;
+                    dragLayer = null;
+                    displayCanvas.style.cursor = 'default';
+                } else {
+                    // Handle layer selection (only if not dragging)
+                    const layer = layerManager.getLayerAt(e.offsetX, e.offsetY);
+                    if (layer) {
+                        layerManager.selectLayer(layer.id);
+                        console.log('Selected layer:', layer.id);
+                    } else {
+                        layerManager.selectLayer(null);
+                        console.log('Deselected all layers');
+                    }
+                    // Re-render to show selection state
+                    layerManager.renderLayers();
+                }
+            }
+        });
+        
+        displayCanvas.addEventListener('pointerleave', () => {
+            if (currentMode === MODES.DRAW) {
+                isDrawing = false;
+            } else if (currentMode === MODES.SELECT) {
+                // Stop dragging/resizing/rotating if pointer leaves canvas
+                if (isRotating) {
+                    isRotating = false;
+                }
+                if (isResizing) {
+                    isResizing = false;
+                    resizeHandle = null;
+                    resizeStartBounds = null;
+                }
+                if (isDragging) {
+                    isDragging = false;
+                    dragLayer = null;
+                }
+                displayCanvas.style.cursor = 'default';
+            }
+        });
+        
+        // Deselect when clicking outside canvas
+        document.addEventListener('click', (e) => {
+            // Check if click is outside the display canvas
+            if (currentMode === MODES.SELECT && !displayCanvas.contains(e.target)) {
+                // Don't deselect if clicking on mode buttons or other controls
+                const isControl = e.target.closest('.mode-selector, #image-upload, button, input, select');
+                if (!isControl && layerManager.selectedLayer) {
+                    layerManager.selectLayer(null);
+                    layerManager.renderLayers();
+                }
+            }
+        });
         
         // Image upload
         document.getElementById('image-upload').addEventListener('change', (e) => {
@@ -455,19 +1037,27 @@
             if (file) {
                 const img = new Image();
                 img.onload = () => {
-                    ctx.fillStyle = 'white';
-                    ctx.fillRect(0, 0, currentQuality, currentQuality);
+                    // Calculate initial scale to fit nicely in canvas
+                    const maxSize = Math.min(512 * 0.6, Math.max(img.width, img.height)); // 60% of canvas
+                    const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
                     
-                    const scale = Math.min(currentQuality / img.width, currentQuality / img.height);
-                    const width = img.width * scale;
-                    const height = img.height * scale;
-                    const x = (currentQuality - width) / 2;
-                    const y = (currentQuality - height) / 2;
+                    // Create new layer positioned at center
+                    const layer = new ImageLayer(img, {
+                        x: 256, // Center of 512x512 display canvas
+                        y: 256,
+                        scaleX: scale,
+                        scaleY: scale
+                    });
                     
-                    ctx.drawImage(img, x, y, width, height);
-                    throttledTextureUpdate();
+                    layerManager.addLayer(layer);
+                    
+                    // Clean up blob URL
+                    URL.revokeObjectURL(img.src);
                 };
                 img.src = URL.createObjectURL(file);
+                
+                // Reset file input
+                e.target.value = '';
             }
         });
         
@@ -492,9 +1082,8 @@
         });
         
         document.getElementById('clear-canvas-btn').addEventListener('click', () => {
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, currentQuality, currentQuality);
-            throttledTextureUpdate();
+            // Clear all layers
+            layerManager.clearLayers();
         });
         
         document.getElementById('toggle-canvas-btn').addEventListener('click', () => {
@@ -505,6 +1094,15 @@
         
         document.getElementById('hide-canvas-btn').addEventListener('click', () => {
             document.getElementById('canvas-editor').style.display = 'none';
+        });
+        
+        // Mode toggle event handlers
+        document.getElementById('draw-mode-btn').addEventListener('click', () => {
+            setMode(MODES.DRAW);
+        });
+        
+        document.getElementById('select-mode-btn').addEventListener('click', () => {
+            setMode(MODES.SELECT);
         });
         
         // Model control sliders
@@ -579,7 +1177,25 @@
         
         initializeCanvas(targetQuality);
         createCanvasTexture();
+        setMode(MODES.SELECT); // Initialize in select mode
         animate();
+        
+        // Load default GLB model
+        fetch('91x91_4.glb')
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => {
+                loader.parse(arrayBuffer, '', (gltf) => {
+                    placeModelOnFloor(gltf.scene);
+                    dropZone.classList.add('hidden');
+                }, (error) => {
+                    console.warn('Could not load default GLB:', error);
+                    // Keep drop zone visible if default model fails to load
+                });
+            })
+            .catch(error => {
+                console.warn('Default GLB file not found:', error);
+                // Keep drop zone visible if file doesn't exist
+            });
         
         // Memory monitoring
         if (performance.memory) {
