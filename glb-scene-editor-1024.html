@@ -3,273 +3,241 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GLB Scene Editor - High Resolution</title>
+    <title>3D GLB Scene Editor - Canvas-to-Texture Pipeline</title>
     <style>
-        body { margin: 0; font-family: monospace; overflow: hidden; }
-        #drop-zone { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; 
-                      background: rgba(0,0,0,0.9); color: white; font-size: 24px; z-index: 100; }
-        #drop-zone.dragging { background: rgba(0,100,0,0.9); }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; background: #1a1a1a; color: #fff; }
+        canvas#three-canvas { position: fixed; top: 0; left: 0; z-index: 1; }
+        
+        /* Controls Panel - Three.js-style */
+        #controls { position: fixed; top: 10px; left: 10px; background: rgba(20, 20, 20, 0.95); border: 1px solid #333; border-radius: 6px; padding: 12px; width: 280px; max-height: calc(100vh - 40px); overflow-y: auto; z-index: 100; font-size: 12px; backdrop-filter: blur(10px); }
+        
+        .collapsible-panel { margin-bottom: 12px; border: 1px solid #444; border-radius: 4px; background: rgba(40, 40, 40, 0.6); }
+        .panel-header { background: #333; padding: 8px 12px; cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; border-radius: 3px 3px 0 0; }
+        .panel-header:hover { background: #444; }
+        .panel-toggle { font-size: 10px; color: #aaa; }
+        .panel-content { padding: 10px; }
+        .collapsible-panel.collapsed .panel-content { display: none; }
+        
+        .control-group { margin-bottom: 12px; }
+        .control-group label { display: block; margin-bottom: 4px; color: #ccc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .control-group input, .control-group select { width: 100%; padding: 6px 8px; background: #222; border: 1px solid #555; border-radius: 3px; color: #fff; font-size: 11px; }
+        .control-group input[type="range"] { padding: 0; height: 20px; }
+        .control-group input:focus { outline: none; border-color: #0084ff; box-shadow: 0 0 0 2px rgba(0, 132, 255, 0.2); }
+        
+        button { background: #333; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+        button:hover { background: #444; }
+        button:active { background: #222; }
+        
+        /* Range Slider Styling */
+        input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; background: #444; outline: none; border-radius: 2px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; background: #0084ff; cursor: pointer; border-radius: 50%; }
+        input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; background: #0084ff; cursor: pointer; border-radius: 50%; border: none; }
+        
+        .slider-value { display: inline-block; min-width: 40px; text-align: right; color: #0084ff; font-weight: 500; }
+        
+        /* Drop Zone */
+        #drop-zone { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 200px; border: 2px dashed #555; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 50; background: rgba(30, 30, 30, 0.9); transition: all 0.3s ease; }
+        #drop-zone.dragging { border-color: #0084ff; background: rgba(0, 132, 255, 0.1); }
         #drop-zone.hidden { display: none; }
-        #controls { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); 
-                    padding: 15px; border-radius: 5px; color: white; min-width: 250px;
-                    max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        button { margin: 5px; padding: 8px 12px; cursor: pointer; background: #4a90e2; 
-                 color: white; border: none; border-radius: 3px; }
-        button:hover { background: #357abd; }
-        #canvas-editor { position: fixed; top: 10px; right: 10px; bottom: 10px; 
-                         width: calc(100vw - 20px - 300px); max-width: 600px; min-width: 350px;
-                         background: rgba(0,0,0,0.8); padding: 15px; padding-left: 25px; border-radius: 5px; 
-                         color: white; display: none; overflow-y: auto; -webkit-overflow-scrolling: touch;
-                         display: flex; flex-direction: column; }
-        #canvas-editor:not([style*="display: none"]) { display: flex; }
-        #display-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
-        #texture-canvas { display: none; } /* Hidden - used only for texture generation */
-        .quality-info { font-size: 10px; color: #888; margin-top: 5px; }
-        #canvas-controls { margin-top: 10px; }
-        input[type="color"] { width: 40px; height: 25px; margin: 5px; }
-        input[type="file"] { margin: 5px 0; }
-        #model-controls { margin-top: 15px; border-top: 1px solid #444; padding-top: 15px; display: none; }
-        .control-group { margin: 10px 0; }
-        .control-group label { display: block; font-size: 11px; margin-bottom: 3px; }
-        input[type="range"] { width: 100%; }
-        input[type="checkbox"] { margin-right: 8px; }
-        .mode-btn { margin: 2px; padding: 5px 10px; border: 1px solid #666; background: #333; color: white; cursor: pointer; }
-        .mode-btn.active { background: #4a90e2; border-color: #357abd; }
-        .mode-btn:disabled { background: #222; color: #666; cursor: not-allowed; }
-        #draw-tools { margin: 5px 0; }
-        #status { margin-top: 10px; font-size: 12px; color: #0f0; }
-        #performance-info { font-size: 10px; color: #888; margin-top: 5px; }
+        #drop-zone p { margin: 0; text-align: center; color: #aaa; }
         
-        /* Three.js Editor-Style Components */
-        .ui-panel { position: relative; }
-        .ui-resizer { 
-            position: absolute;
-            background: linear-gradient(to right, 
-                transparent 0%, 
-                rgba(74, 144, 226, 0.3) 30%, 
-                rgba(74, 144, 226, 0.6) 50%, 
-                rgba(74, 144, 226, 0.3) 70%, 
-                transparent 100%);
-            opacity: 0;
-            transition: opacity 0.2s ease;
-            touch-action: none;
-            user-select: none;
-        }
-        .ui-resizer:hover, .ui-resizer.resizing { opacity: 1; }
-        .ui-panel:hover .ui-resizer { opacity: 0.7; }
+        /* Canvas Editor Panel */
+        #canvas-editor { position: fixed; top: 10px; right: 10px; background: rgba(20, 20, 20, 0.95); border: 1px solid #333; border-radius: 6px; width: 450px; max-height: calc(100vh - 40px); overflow-y: auto; z-index: 100; backdrop-filter: blur(10px); transition: width 0.3s ease; }
+        #canvas-editor.panel-collapsed { width: auto; max-width: 200px; }
         
-        .ui-resizer.vertical {
-            left: 0; top: 0; bottom: 0; width: 10px;
-            cursor: ew-resize;
-            border-radius: 5px 0 0 5px;
-        }
+        /* Canvas Container */
+        .canvas-container { padding: 12px; display: flex; flex-direction: column; align-items: center; }
+        #display-canvas { border: 1px solid #555; border-radius: 4px; max-width: 100%; height: auto; background: white; cursor: crosshair; }
         
-        /* Collapsible Panel System */
-        .collapsible-panel .panel-header {
-            cursor: pointer;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            margin-bottom: 10px;
-            transition: background 0.2s ease;
-            flex-shrink: 0;
-        }
-        .collapsible-panel .panel-header:hover {
-            background: rgba(255,255,255,0.1);
-            padding: 8px 5px;
-            margin: 0 -5px 10px -5px;
-            border-radius: 3px;
-        }
-        .collapsible-panel .panel-toggle {
-            margin-right: 8px;
-            font-size: 12px;
-            color: #4a90e2;
-            font-weight: bold;
-            transition: transform 0.2s ease;
-        }
-        .collapsible-panel .panel-content {
-            overflow: hidden;
-            transition: all 0.3s ease;
-            max-height: 1000px;
-        }
-        .collapsible-panel.collapsed .panel-content {
-            max-height: 0;
-            margin: 0;
-            padding: 0;
-        }
-        .collapsible-panel.collapsed .panel-toggle {
-            transform: rotate(-90deg);
-        }
+        /* Mode Selector */
+        .mode-selector { display: flex; gap: 6px; margin: 12px 0; }
+        .mode-btn { padding: 6px 12px; font-size: 11px; border-radius: 3px; background: #333; color: #ccc; border: 1px solid #555; cursor: pointer; }
+        .mode-btn.active { background: #0084ff; color: white; border-color: #0084ff; }
+        .mode-btn:hover:not(.active) { background: #444; }
         
-        /* Special handling for main panel collapses */
-        .ui-panel.panel-collapsed {
-            height: auto !important;
-            bottom: auto !important;
-        }
-        .ui-panel.panel-collapsed .collapsible-panel:not(.main-panel) {
-            display: none;
-        }
+        /* Tool Sections */
+        #draw-tools { display: none; }
+        #image-tools { margin-top: 12px; }
         
-        /* Color picker modal styles */
-        .color-modal { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.8); z-index: 2000; 
-            align-items: center; justify-content: center;
-        }
-        .color-modal-content { 
-            background: #2a2a2a; padding: 20px; border-radius: 8px; 
-            width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.8); color: white;
-            border: 1px solid #555; max-height: 90vh; overflow-y: auto;
-        }
-        .color-modal h3 { margin: 0 0 15px 0; color: white; }
-        .color-input-group { margin: 10px 0; }
-        .color-input-group label { display: block; font-size: 12px; margin-bottom: 3px; color: #ccc; }
-        .color-input-group input { width: 100%; padding: 5px; border: 1px solid #555; border-radius: 3px; 
-                                  background: #333; color: white; }
-        .color-input-group input[type="color"] { height: 40px; }
-        .color-preview { width: 100%; height: 40px; border: 1px solid #555; border-radius: 3px; margin: 10px 0; }
-        .modal-buttons { text-align: right; margin-top: 15px; }
-        .modal-buttons button { margin-left: 10px; }
-        .recent-swatches { margin: 10px 0; }
-        .swatch-preview { 
-            display: inline-block; width: 20px; height: 20px; border: 1px solid #555; 
-            border-radius: 3px; margin: 2px; cursor: pointer; 
-        }
-        .swatch-preview:hover { border-color: #4a90e2; }
+        /* Color Modal */
+        #colorModal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #1a1a1a; padding: 24px; border-radius: 8px; width: 400px; max-width: 90vw; border: 1px solid #333; }
+        .color-preview { width: 60px; height: 60px; border: 2px solid #555; border-radius: 6px; margin: 12px 0; }
+        .recent-colors { display: flex; gap: 8px; margin: 12px 0; }
+        .swatch-preview { width: 24px; height: 24px; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+        .swatch-preview:hover { border-color: #0084ff; }
+        
+        /* Quick Swatches */
+        #quickSwatches { display: flex; gap: 4px; align-items: center; }
+        
+        /* UI Resizer */
+        .ui-resizer { position: absolute; background: #333; opacity: 0.3; transition: opacity 0.2s; }
+        .ui-resizer:hover, .ui-resizer.resizing { opacity: 0.8; }
+        .ui-resizer.vertical { top: 0; right: -3px; width: 6px; height: 100%; cursor: ew-resize; }
+        .ui-resizer.horizontal { bottom: -3px; left: 0; width: 100%; height: 6px; cursor: ns-resize; }
+        
+        /* Performance Info */
+        .performance-info { position: fixed; bottom: 10px; right: 10px; background: rgba(20, 20, 20, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 10px; color: #aaa; z-index: 50; }
     </style>
 </head>
 <body>
-    <div id="drop-zone">Drag & Drop GLB File</div>
+    <!-- Drop Zone -->
+    <div id="drop-zone">
+        <p>Drop GLB file here</p>
+        <p style="font-size: 12px; color: #666;">Or use the file input below</p>
+    </div>
     
-    <div id="controls" class="ui-panel">
+    <!-- Controls Panel -->
+    <div id="controls">
         <div class="collapsible-panel main-panel">
-            <div class="panel-header" data-panel="controls" data-target="controls">
+            <div class="panel-header" data-panel="scene-controls" data-target="controls">
+                <span>3D Scene Controls</span>
                 <span class="panel-toggle">▼</span>
-                <h3 style="margin: 0;">GLB Scene Editor</h3>
             </div>
             <div class="panel-content">
+                <!-- Model Controls -->
+                <div id="model-controls" style="display: none;">
+                    <div class="control-group">
+                        <label>Position X</label>
+                        <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
+                        <span class="slider-value" id="pos-x-val">0.0</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Position Z</label>
+                        <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
+                        <span class="slider-value" id="pos-z-val">0.0</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Scale</label>
+                        <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1">
+                        <span class="slider-value" id="scale-val">1.0</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Rotation Y</label>
+                        <input type="range" id="rot-y" min="0" max="360" step="1" value="0">
+                        <span class="slider-value" id="rot-y-val">0°</span>
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="backlight-toggle"> Backlight Effect
+                        </label>
+                    </div>
+                    <button id="clear-model-btn" style="display: none;">Clear Model</button>
+                </div>
+                
+                <!-- Scene Controls -->
                 <div class="control-group">
-                    <label>Background Color:</label>
+                    <label>Background Color</label>
                     <input type="color" id="bg-color" value="#cccccc">
                 </div>
-                <button id="clear-model-btn" style="display:none;">Remove Model</button>
-                <div id="status">Drop a GLB file to begin</div>
-                <div id="performance-info">Performance: Ready</div>
                 
-                <div id="model-controls" class="collapsible-panel">
-                    <div class="panel-header" data-panel="model-controls">
-                        <span class="panel-toggle">▼</span>
-                        <h4 style="margin: 0;">Model Controls</h4>
+                <!-- Canvas Editor Toggle -->
+                <div class="control-group">
+                    <button id="toggle-canvas-btn">Toggle Canvas Editor</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status -->
+        <div class="control-group">
+            <div id="status" style="font-size: 10px; color: #666;">Drop a GLB file to begin</div>
+            <div id="performance-info" style="margin-top: 4px; font-size: 10px; color: #666;">Performance: 60 FPS</div>
+            <div id="quality-info" style="margin-top: 4px; font-size: 10px; color: #666;">Resolution: 1024x1024</div>
+        </div>
+    </div>
+    
+    <!-- Canvas Editor Panel -->
+    <div id="canvas-editor">
+        <div class="ui-resizer vertical" data-panel="canvas-editor"></div>
+        
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="canvas-editor">
+                <span>Canvas Texture Editor</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <!-- Canvas Container -->
+                <div class="canvas-container">
+                    <canvas id="display-canvas" width="512" height="512"></canvas>
+                    <canvas id="texture-canvas" width="1024" height="1024" style="display: none;"></canvas>
+                </div>
+                
+                <!-- Mode Selector -->
+                <div class="mode-selector">
+                    <button id="draw-mode-btn" class="mode-btn">Draw</button>
+                    <button id="select-mode-btn" class="mode-btn active">Select</button>
+                </div>
+                
+                <!-- Draw Tools -->
+                <div id="draw-tools">
+                    <div class="control-group">
+                        <label>Brush Color</label>
+                        <input type="color" id="brush-color" value="#ff0000">
                     </div>
-                    <div class="panel-content">
-                        <div class="control-group">
-                            <label>Position X: <span id="pos-x-val">0</span></label>
-                            <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
-                            <label>Position Z: <span id="pos-z-val">0</span></label>
-                            <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
-                        </div>
-                        <div class="control-group">
-                            <label>Scale: <span id="scale-val">1.0</span></label>
-                            <input type="range" id="scale" min="0.1" max="5" step="0.1" value="1">
-                        </div>
-                        <div class="control-group">
-                            <label>Rotation Y: <span id="rot-y-val">0°</span></label>
-                            <input type="range" id="rot-y" min="0" max="360" step="5" value="0">
-                        </div>
-                        <div class="control-group">
-                            <label>
-                                <input type="checkbox" id="backlight-toggle"> Backlight
-                            </label>
-                        </div>
-                        <button id="toggle-canvas-btn">Show Canvas Editor</button>
+                </div>
+                
+                <!-- Image Tools -->
+                <div id="image-tools">
+                    <div class="control-group">
+                        <label>Upload Image</label>
+                        <input type="file" id="image-upload" accept="image/*">
+                    </div>
+                    
+                    <div class="control-group">
+                        <button onclick="showColorSquareDialog()">Add Color Square</button>
+                        <div id="quickSwatches" style="display: flex; gap: 4px; margin-top: 8px;"></div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <button id="clear-canvas-btn">Clear Canvas</button>
+                        <button id="hide-canvas-btn">Hide Panel</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <div id="canvas-editor" class="ui-panel">
-        <div class="ui-resizer vertical" data-panel="canvas-editor"></div>
-        <div class="collapsible-panel main-panel">
-            <div class="panel-header" data-panel="canvas-editor-content" data-target="canvas-editor">
-                <span class="panel-toggle">▼</span>
-                <h4 style="margin: 0;">High-Resolution Texture Editor</h4>
-            </div>
-            <div class="panel-content" style="flex: 1; display: flex; flex-direction: column;">
-                <canvas id="display-canvas" width="512" height="512" style="max-width: 100%; height: auto; width: auto;"></canvas>
-                <canvas id="texture-canvas" width="1024" height="1024"></canvas>
-                <div id="canvas-controls">
-            <div id="mode-controls" style="margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 10px;">
-                <button id="draw-mode-btn" class="mode-btn">✏️ Draw</button>
-                <button id="select-mode-btn" class="mode-btn active">🔲 Select</button>
-            </div>
-            <div id="draw-tools">
-                <input type="color" id="brush-color" value="#ff0000" title="Brush Color">
-            </div>
-            <div id="image-tools">
-                <input type="file" id="image-upload" accept="image/*" title="Upload Image">
-                <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
-                    <button onclick="showColorSquareDialog()">Add Color Square</button>
-                    <div id="quickSwatches" style="display: flex; gap: 2px;"></div>
-                </div>
-            </div>
-            <button id="clear-canvas-btn">Clear</button>
-            <button id="hide-canvas-btn">Hide</button>
-        </div>
-        <div style="font-size: 11px; color: #aaa; margin-top: 10px;">
-            Draw or upload images to texture "Image" materials
-        </div>
-        <div class="quality-info" id="quality-info">Resolution: 1024x1024 (High Quality)</div>
-    </div>
-
-    <!-- Color picker modal - moved outside canvas-editor -->
-    <div id="colorModal" class="color-modal">
-        <div class="color-modal-content">
-            <h3>Add Color Square</h3>
-            
-            <div class="color-input-group">
-                <label>Color Picker:</label>
+    <!-- Color Modal -->
+    <div id="colorModal">
+        <div class="modal-content">
+            <h3>Create Color Square</h3>
+            <div class="control-group">
+                <label>Color</label>
                 <input type="color" id="modalColorPicker" value="#ff0000">
             </div>
-            
-            <div class="color-input-group">
-                <label>Hex Code:</label>
-                <input type="text" id="hexInput" value="#ff0000" maxlength="7">
+            <div class="control-group">
+                <label>Hex</label>
+                <input type="text" id="hexInput" value="#ff0000">
             </div>
-            
-            <div class="color-input-group">
-                <label>Red (0-255):</label>
-                <input type="number" id="redInput" value="255" min="0" max="255">
+            <div style="display: flex; gap: 12px;">
+                <div class="control-group" style="flex: 1;">
+                    <label>Red</label>
+                    <input type="number" id="redInput" min="0" max="255" value="255">
+                </div>
+                <div class="control-group" style="flex: 1;">
+                    <label>Green</label>
+                    <input type="number" id="greenInput" min="0" max="255" value="0">
+                </div>
+                <div class="control-group" style="flex: 1;">
+                    <label>Blue</label>
+                    <input type="number" id="blueInput" min="0" max="255" value="0">
+                </div>
             </div>
-            
-            <div class="color-input-group">
-                <label>Green (0-255):</label>
-                <input type="number" id="greenInput" value="0" min="0" max="255">
-            </div>
-            
-            <div class="color-input-group">
-                <label>Blue (0-255):</label>
-                <input type="number" id="blueInput" value="0" min="0" max="255">
-            </div>
-            
-            <div class="color-input-group">
-                <label>Opacity:</label>
-                <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="1">
+            <div class="control-group">
+                <label>Opacity</label>
+                <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="1">
                 <span id="opacityValue">100%</span>
             </div>
-            
             <div class="color-preview" id="colorPreview"></div>
             
-            <div class="recent-swatches">
-                <label>Recent Colors:</label>
-                <div id="recentColors"></div>
+            <div class="control-group">
+                <label>Recent Colors</label>
+                <div class="recent-colors" id="recentColors"></div>
             </div>
             
-            <div class="modal-buttons">
-                <button onclick="closeColorModal()">Cancel</button>
-                <button class="primary-btn" onclick="insertColorSquare()">Insert Color</button>
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button onclick="insertColorSquare()" style="flex: 1;">Add Square</button>
+                <button onclick="closeColorModal()" style="flex: 1;">Cancel</button>
             </div>
         </div>
     </div>
@@ -277,1553 +245,14 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="scene-manager.js"></script>
+    <script src="model-loader.js"></script>
+    <script src="canvas-editor.js"></script>
+    <script src="layer-manager.js"></script>
+    <script src="ui-controls.js"></script>
+    <script src="main.js"></script>
     <script>
-        // Scene setup
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xcccccc);
-        
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(5, 5, 5);
-        
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        document.body.appendChild(renderer.domElement);
-        
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.maxPolarAngle = Math.PI * 0.8;
-        
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(10, 10, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.setScalar(2048);
-        scene.add(directionalLight);
-        
-        // Floor plane
-        const floorGeometry = new THREE.PlaneGeometry(20, 20);
-        const floorMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x808080, 
-            roughness: 0.8,
-            metalness: 0.1 
-        });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -0.01;
-        floor.receiveShadow = true;
-        scene.add(floor);
-        
-        // GLB loader and canvas setup
-        const loader = new THREE.GLTFLoader();
-        let currentModel = null;
-        let imageMaterials = [];
-        let canvasTexture = null;
-        
-        // Dual-canvas setup: display (768x768) + texture (1024x1024)
-        const displayCanvas = document.getElementById('display-canvas');
-        const textureCanvas = document.getElementById('texture-canvas');
-        
-        const displayCtx = displayCanvas.getContext('2d', {
-            alpha: false,
-            desynchronized: true,
-            willReadFrequently: false
-        });
-        
-        const textureCtx = textureCanvas.getContext('2d', {
-            alpha: false,
-            desynchronized: true, 
-            willReadFrequently: false
-        });
-        
-        // Legacy compatibility - keep existing canvas reference for texture generation
-        const canvas = textureCanvas;
-        const ctx = textureCtx;
-        let isDrawing = false;
-        let targetQuality = 1024;
-        let currentQuality = 1024;
-        let lastTextureUpdate = 0;
-        const UPDATE_THROTTLE = 16; // Max 60fps texture updates
-        
-        // Interaction state for layer manipulation
-        let isDragging = false;
-        let dragStartX = 0;
-        let dragStartY = 0;
-        let dragLayer = null;
-        let dragStartLayerX = 0;
-        let dragStartLayerY = 0;
-        
-        // Resize handle state
-        let isResizing = false;
-        let resizeHandle = null; // 'nw', 'ne', 'sw', 'se', 'n', 'e', 's', 'w', 'rotate'
-        let resizeStartBounds = null;
-        
-        // Rotation state
-        let isRotating = false;
-        let rotationStartAngle = 0;
-        
-        // Handle types and cursors
-        const HANDLES = {
-            'nw': { cursor: 'nw-resize' },
-            'ne': { cursor: 'ne-resize' },
-            'sw': { cursor: 'sw-resize' },
-            'se': { cursor: 'se-resize' },
-            'n': { cursor: 'n-resize' },
-            'e': { cursor: 'e-resize' },
-            's': { cursor: 's-resize' },
-            'w': { cursor: 'w-resize' },
-            'rotate': { cursor: 'grab' }
-        };
-        
-        // Mode management
-        let currentMode = 'SELECT'; // DRAW, SELECT - default to SELECT
-        const MODES = { DRAW: 'DRAW', SELECT: 'SELECT' };
-        
-        // Layer system
-        class ImageLayer {
-            constructor(image, options = {}) {
-                this.id = 'layer_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                this.image = image;
-                this.x = options.x || 0;
-                this.y = options.y || 0;
-                this.scaleX = options.scaleX || 1;
-                this.scaleY = options.scaleY || 1;
-                this.rotation = options.rotation || 0;
-                this.opacity = options.opacity || 1;
-                this.visible = options.visible !== false;
-                this.selected = false;
-                this.originalWidth = image.width;
-                this.originalHeight = image.height;
-            }
-            
-            // Get transformed bounds for hit testing
-            getBounds() {
-                const width = this.originalWidth * this.scaleX;
-                const height = this.originalHeight * this.scaleY;
-                return {
-                    left: this.x - width/2,
-                    top: this.y - height/2,
-                    right: this.x + width/2,
-                    bottom: this.y + height/2,
-                    width: width,
-                    height: height
-                };
-            }
-            
-            // Get resize handles for this layer (8 handles around the bounds)
-            getResizeHandles() {
-                const bounds = this.getBounds();
-                const handleSize = 8;
-                const half = handleSize / 2;
-                const rotateRadius = 6;
-                
-                return {
-                    'nw': { x: bounds.left - half, y: bounds.top - half, width: handleSize, height: handleSize },
-                    'ne': { x: bounds.right - half, y: bounds.top - half, width: handleSize, height: handleSize },
-                    'sw': { x: bounds.left - half, y: bounds.bottom - half, width: handleSize, height: handleSize },
-                    'se': { x: bounds.right - half, y: bounds.bottom - half, width: handleSize, height: handleSize },
-                    'n': { x: bounds.left + bounds.width/2 - half, y: bounds.top - half, width: handleSize, height: handleSize },
-                    'e': { x: bounds.right - half, y: bounds.top + bounds.height/2 - half, width: handleSize, height: handleSize },
-                    's': { x: bounds.left + bounds.width/2 - half, y: bounds.bottom - half, width: handleSize, height: handleSize },
-                    'w': { x: bounds.left - half, y: bounds.top + bounds.height/2 - half, width: handleSize, height: handleSize },
-                    'rotate': { 
-                        x: bounds.left + bounds.width/2 - rotateRadius, 
-                        y: bounds.top - 25 - rotateRadius, 
-                        width: rotateRadius * 2, 
-                        height: rotateRadius * 2 
-                    }
-                };
-            }
-            
-            // Check if point hits a resize handle
-            getHandleAt(x, y) {
-                if (!this.selected) return null;
-                
-                const handles = this.getResizeHandles();
-                for (const [handleType, handle] of Object.entries(handles)) {
-                    if (x >= handle.x && x <= handle.x + handle.width &&
-                        y >= handle.y && y <= handle.y + handle.height) {
-                        return handleType;
-                    }
-                }
-                return null;
-            }
-            
-            // Check if point is inside this layer
-            hitTest(x, y) {
-                const bounds = this.getBounds();
-                return x >= bounds.left && x <= bounds.right && 
-                       y >= bounds.top && y <= bounds.bottom;
-            }
-        }
-        
-        class LayerManager {
-            constructor() {
-                this.layers = [];
-                this.selectedLayer = null;
-            }
-            
-            addLayer(layer) {
-                this.layers.push(layer);
-                this.renderLayers();
-                return layer;
-            }
-            
-            removeLayer(layerId) {
-                const index = this.layers.findIndex(l => l.id === layerId);
-                if (index >= 0) {
-                    this.layers.splice(index, 1);
-                    this.renderLayers();
-                    return true;
-                }
-                return false;
-            }
-            
-            selectLayer(layerId) {
-                // Deselect all layers
-                this.layers.forEach(layer => layer.selected = false);
-                
-                // Select specific layer
-                if (layerId) {
-                    const layer = this.layers.find(l => l.id === layerId);
-                    if (layer) {
-                        layer.selected = true;
-                        this.selectedLayer = layer;
-                        return layer;
-                    }
-                }
-                this.selectedLayer = null;
-                return null;
-            }
-            
-            getLayerAt(x, y) {
-                // Check layers from top to bottom (reverse order)
-                for (let i = this.layers.length - 1; i >= 0; i--) {
-                    if (this.layers[i].visible && this.layers[i].hitTest(x, y)) {
-                        return this.layers[i];
-                    }
-                }
-                return null;
-            }
-            
-            // Get resize handle at position (checks selected layer only)
-            getResizeHandleAt(x, y) {
-                if (!this.selectedLayer) return null;
-                return this.selectedLayer.getHandleAt(x, y);
-            }
-            
-            clearLayers() {
-                this.layers = [];
-                this.selectedLayer = null;
-                this.renderLayers();
-            }
-            
-            renderLayers() {
-                this.renderToCanvas(displayCtx, 512);
-                this.renderToCanvas(textureCtx, currentQuality);
-                throttledTextureUpdate();
-            }
-            
-            renderToCanvas(ctx, size) {
-                // Clear canvas
-                ctx.fillStyle = 'white';
-                ctx.fillRect(0, 0, size, size);
-                
-                // Render each layer
-                this.layers.forEach(layer => {
-                    if (!layer.visible) return;
-                    
-                    ctx.save();
-                    ctx.globalAlpha = layer.opacity;
-                    
-                    // Transform for this canvas size
-                    const scaleRatio = size / 512; // Normalize to display size
-                    const x = layer.x * scaleRatio;
-                    const y = layer.y * scaleRatio;
-                    const width = layer.originalWidth * layer.scaleX * scaleRatio;
-                    const height = layer.originalHeight * layer.scaleY * scaleRatio;
-                    
-                    // Apply transformations
-                    ctx.translate(x, y);
-                    if (layer.rotation) {
-                        ctx.rotate(layer.rotation);
-                    }
-                    
-                    // Draw image centered at transform origin
-                    ctx.drawImage(layer.image, -width/2, -height/2, width, height);
-                    
-                    // Draw selection outline and handles on display canvas only (not on texture)
-                    if (layer.selected && ctx === displayCtx) {
-                        ctx.strokeStyle = '#ff8800';
-                        ctx.lineWidth = 2;
-                        ctx.setLineDash([5, 5]);
-                        ctx.strokeRect(-width/2, -height/2, width, height);
-                        ctx.setLineDash([]); // Reset line dash
-                        
-                        // Draw resize handles
-                        ctx.fillStyle = '#ff8800';
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.lineWidth = 1;
-                        
-                        const handleSize = 8;
-                        const half = handleSize / 2;
-                        
-                        // Corner handles
-                        const corners = [
-                            [-width/2 - half, -height/2 - half], // nw
-                            [width/2 - half, -height/2 - half],  // ne
-                            [-width/2 - half, height/2 - half],  // sw
-                            [width/2 - half, height/2 - half]    // se
-                        ];
-                        
-                        // Edge handles
-                        const edges = [
-                            [0 - half, -height/2 - half],  // n
-                            [width/2 - half, 0 - half],    // e
-                            [0 - half, height/2 - half],   // s
-                            [-width/2 - half, 0 - half]    // w
-                        ];
-                        
-                        [...corners, ...edges].forEach(([hx, hy]) => {
-                            ctx.fillRect(hx, hy, handleSize, handleSize);
-                            ctx.strokeRect(hx, hy, handleSize, handleSize);
-                        });
-                        
-                        // Rotation handle - circle above the top edge
-                        const rotateHandleX = 0;
-                        const rotateHandleY = -height/2 - 25;
-                        const rotateRadius = 6;
-                        
-                        ctx.fillStyle = '#4488ff';
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.beginPath();
-                        ctx.arc(rotateHandleX, rotateHandleY, rotateRadius, 0, 2 * Math.PI);
-                        ctx.fill();
-                        ctx.stroke();
-                        
-                        // Line connecting rotation handle to object
-                        ctx.strokeStyle = '#4488ff';
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.moveTo(0, -height/2);
-                        ctx.lineTo(rotateHandleX, rotateHandleY + rotateRadius);
-                        ctx.stroke();
-                    }
-                    
-                    ctx.restore();
-                });
-            }
-        }
-        
-        // Initialize layer manager
-        const layerManager = new LayerManager();
-        
-        // Color square state
-        let recentColors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
-        
-        // Coordinate transformation helpers
-        function displayToTexture(displayCoord) {
-            return displayCoord * (currentQuality / 512);
-        }
-        
-        function drawToCanvases(drawOperation) {
-            // Draw on display canvas for immediate visual feedback
-            drawOperation(displayCtx, 1.0); // 1:1 scale for display
-            
-            // Mirror to texture canvas with coordinate scaling
-            const scale = currentQuality / 512;
-            drawOperation(textureCtx, scale);
-        }
-        
-        // Performance monitoring
-        let performanceMonitor = { 
-            frameCount: 0, 
-            lastTime: performance.now(), 
-            averageFPS: 60,
-            samples: []
-        };
-        
-        // Advanced device capability detection
-        function detectDeviceCapabilities() {
-            const gl = renderer.getContext();
-            const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            const hardwareConcurrency = navigator.hardwareConcurrency || 4;
-            
-            // Estimate GPU capabilities
-            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            const renderer_info = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown';
-            
-            // Conservative memory estimation
-            let estimatedVRAM = 512;
-            if (renderer_info.includes('GeForce') || renderer_info.includes('Radeon')) {
-                estimatedVRAM = 2048;
-            } else if (renderer_info.includes('Intel') && !isMobile) {
-                estimatedVRAM = 1024;
-            }
-            
-            // Determine if device can handle 1024x1024
-            const canHandle1024 = !isMobile && maxTextureSize >= 2048 && estimatedVRAM >= 1024 && hardwareConcurrency >= 4;
-            
-            return {
-                maxTextureSize,
-                isMobile,
-                hardwareConcurrency,
-                estimatedVRAM,
-                renderer: renderer_info,
-                canHandle1024,
-                optimalQuality: canHandle1024 ? 1024 : (isMobile ? 256 : 512)
-            };
-        }
-        
-        function initializeCanvas(size = currentQuality) {
-            currentQuality = size;
-            
-            // Initialize texture canvas (for Three.js)
-            textureCanvas.width = size;
-            textureCanvas.height = size;
-            
-            // Initialize display canvas (for user interaction)
-            displayCanvas.width = 512;
-            displayCanvas.height = 512;
-            
-            // Initialize both canvases with white background
-            textureCtx.fillStyle = 'white';
-            textureCtx.fillRect(0, 0, size, size);
-            textureCtx.lineWidth = Math.max(4, size / 170);
-            textureCtx.lineCap = 'round';
-            textureCtx.lineJoin = 'round';
-            textureCtx.imageSmoothingEnabled = true;
-            textureCtx.imageSmoothingQuality = 'high';
-            
-            displayCtx.fillStyle = 'white';
-            displayCtx.fillRect(0, 0, 512, 512);
-            displayCtx.lineWidth = Math.max(3, 512 / 170); // Scale for display
-            displayCtx.lineCap = 'round';
-            displayCtx.lineJoin = 'round';
-            displayCtx.imageSmoothingEnabled = true;
-            displayCtx.imageSmoothingQuality = 'high';
-            
-            // Update info display
-            const memoryEstimate = ((size * size * 3) / 1024).toFixed(0); // RGB format
-            document.getElementById('quality-info').textContent = 
-                `Resolution: ${size}x${size} (${memoryEstimate}KB)`;
-        }
-        
-        function createCanvasTexture() {
-            if (canvasTexture) canvasTexture.dispose();
-            canvasTexture = new THREE.CanvasTexture(textureCanvas);  // Always use texture canvas
-            
-            // Aggressive optimization for high-resolution
-            canvasTexture.format = THREE.RGBFormat; // Save 25% memory
-            canvasTexture.flipY = false;
-            canvasTexture.magFilter = THREE.LinearFilter;
-            canvasTexture.minFilter = THREE.LinearFilter;
-            canvasTexture.generateMipmaps = false; // Critical performance save
-            canvasTexture.wrapS = THREE.ClampToEdgeWrapping;
-            canvasTexture.wrapT = THREE.ClampToEdgeWrapping;
-            canvasTexture.unpackAlignment = 1;
-            canvasTexture.needsUpdate = true;
-            
-            return canvasTexture;
-        }
-        
-        function throttledTextureUpdate() {
-            const now = performance.now();
-            if (now - lastTextureUpdate > UPDATE_THROTTLE) {
-                if (canvasTexture) {
-                    canvasTexture.needsUpdate = true;
-                }
-                lastTextureUpdate = now;
-            }
-        }
-        
-        function updatePerformanceMonitor() {
-            performanceMonitor.frameCount++;
-            const currentTime = performance.now();
-            
-            if (currentTime >= performanceMonitor.lastTime + 1000) {
-                const fps = Math.round(
-                    (performanceMonitor.frameCount * 1000) / (currentTime - performanceMonitor.lastTime)
-                );
-                performanceMonitor.averageFPS = fps;
-                performanceMonitor.frameCount = 0;
-                performanceMonitor.lastTime = currentTime;
-                
-                // Update performance display
-                document.getElementById('performance-info').textContent = 
-                    `Performance: ${fps} FPS (${currentQuality}x${currentQuality})`;
-                
-                // Auto-fallback if severe performance issues
-                if (fps < 30 && currentQuality > 512) {
-                    console.warn('Performance critical, reducing to 512x512');
-                    fallbackToLowerQuality(512);
-                } else if (fps < 20 && currentQuality > 256) {
-                    console.warn('Performance critical, reducing to 256x256');
-                    fallbackToLowerQuality(256);
-                }
-            }
-        }
-        
-        function fallbackToLowerQuality(newQuality) {
-            if (newQuality >= currentQuality) return;
-            
-            console.log(`Auto-scaling from ${currentQuality}x${currentQuality} to ${newQuality}x${newQuality}`);
-            
-            const previousImageData = ctx.getImageData(0, 0, currentQuality, currentQuality);
-            initializeCanvas(newQuality);
-            
-            // Scale and preserve content
-            if (previousImageData) {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = previousImageData.width;
-                tempCanvas.height = previousImageData.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCtx.putImageData(previousImageData, 0, 0);
-                
-                ctx.drawImage(tempCanvas, 0, 0, currentQuality, currentQuality);
-            }
-            
-            createCanvasTexture();
-            
-            // Update all materials
-            imageMaterials.forEach(material => {
-                material.map = canvasTexture;
-                material.needsUpdate = true;
-            });
-        }
-        
-        function placeModelOnFloor(model) {
-            if (currentModel) {
-                cleanupModel(currentModel);
-                scene.remove(currentModel);
-            }
-            
-            currentModel = model;
-            scene.add(model);
-            
-            // Calculate bounding box for placement
-            model.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const center = box.getCenter(new THREE.Vector3());
-            
-            // Center and place on floor
-            model.position.x = -center.x;
-            model.position.z = -center.z;
-            model.position.y = -box.min.y;
-            
-            // Auto-scale if too large
-            const maxDimension = Math.max(size.x, size.y, size.z);
-            if (maxDimension > 8) {
-                const scale = 8 / maxDimension;
-                model.scale.setScalar(scale);
-            }
-            
-            // Find and apply textures to "Image" materials
-            imageMaterials = [];
-            model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    const matName = child.material.name || '';
-                    if (matName.toLowerCase().includes('image')) {
-                        imageMaterials.push(child.material);
-                        child.material.map = canvasTexture;
-                        
-                        // Initialize backlight properties
-                        child.material.emissive = new THREE.Color(0x000000);
-                        child.material.emissiveIntensity = 0.0;
-                        child.material.emissiveMap = null;
-                        
-                        child.material.needsUpdate = true;
-                    }
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
-            
-            // Reset backlight toggle
-            document.getElementById('backlight-toggle').checked = false;
-            
-            // Update UI
-            document.getElementById('clear-model-btn').style.display = 'block';
-            document.getElementById('model-controls').style.display = 'block';
-            document.getElementById('status').textContent = 
-                `Loaded model (${imageMaterials.length} Image materials found)`;
-            
-            updateSliders();
-            
-            // Focus camera
-            const modelCenter = new THREE.Vector3();
-            box.getCenter(modelCenter);
-            modelCenter.y = size.y * 0.5;
-            controls.target.copy(modelCenter);
-            
-            const distance = Math.max(size.x, size.y, size.z) * 2;
-            camera.position.set(distance, distance * 0.7, distance);
-            controls.update();
-        }
-        
-        function cleanupModel(model) {
-            model.traverse((child) => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                    if (child.material.map && child.material.map !== canvasTexture) {
-                        child.material.map.dispose();
-                    }
-                    child.material.dispose();
-                }
-            });
-        }
-        
-        function updateSliders() {
-            if (!currentModel) return;
-            
-            document.getElementById('pos-x').value = currentModel.position.x;
-            document.getElementById('pos-z').value = currentModel.position.z;
-            document.getElementById('scale').value = currentModel.scale.x;
-            document.getElementById('rot-y').value = (currentModel.rotation.y * 180 / Math.PI) % 360;
-            
-            updateValueDisplays();
-        }
-        
-        function updateValueDisplays() {
-            if (!currentModel) return;
-            
-            document.getElementById('pos-x-val').textContent = currentModel.position.x.toFixed(1);
-            document.getElementById('pos-z-val').textContent = currentModel.position.z.toFixed(1);
-            document.getElementById('scale-val').textContent = currentModel.scale.x.toFixed(1);
-            document.getElementById('rot-y-val').textContent = Math.round(currentModel.rotation.y * 180 / Math.PI) + '°';
-        }
-        
-        // Drag and drop
-        const dropZone = document.getElementById('drop-zone');
-        
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            document.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); });
-        });
-        
-        document.addEventListener('dragenter', () => dropZone.classList.add('dragging'));
-        document.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
-        
-        document.addEventListener('drop', (e) => {
-            dropZone.classList.remove('dragging');
-            const file = e.dataTransfer.files[0];
-            if (file && file.name.toLowerCase().endsWith('.glb')) {
-                dropZone.classList.add('hidden');
-                loadGLBFile(file);
-            }
-        });
-        
-        function loadGLBFile(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                loader.parse(e.target.result, '', (gltf) => {
-                    placeModelOnFloor(gltf.scene);
-                }, (error) => {
-                    console.error('Error loading GLB:', error);
-                    document.getElementById('status').textContent = 'Error loading GLB file';
-                });
-            };
-            reader.readAsArrayBuffer(file);
-        }
-        
-        // Mode management functions
-        function setMode(newMode) {
-            currentMode = newMode;
-            
-            // Update UI
-            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-            
-            if (newMode === MODES.DRAW) {
-                document.getElementById('draw-mode-btn').classList.add('active');
-                displayCanvas.style.cursor = 'crosshair';
-                document.getElementById('draw-tools').style.display = 'block';
-            } else if (newMode === MODES.SELECT) {
-                document.getElementById('select-mode-btn').classList.add('active');
-                displayCanvas.style.cursor = 'default';
-                document.getElementById('draw-tools').style.display = 'none';
-            }
-            
-            // Image tools always visible
-            document.getElementById('image-tools').style.display = 'block';
-        }
-        
-        // Canvas drawing events - only active in DRAW mode
-        displayCanvas.addEventListener('pointerdown', (e) => {
-            if (currentMode === MODES.DRAW) {
-                isDrawing = true;
-                const color = document.getElementById('brush-color').value;
-                
-                drawToCanvases((ctx, scale) => {
-                    ctx.strokeStyle = color;
-                    ctx.beginPath();
-                    ctx.moveTo(e.offsetX * scale, e.offsetY * scale);
-                });
-            } else if (currentMode === MODES.SELECT) {
-                // First check if clicking on a resize handle
-                const handle = layerManager.getResizeHandleAt(e.offsetX, e.offsetY);
-                if (handle) {
-                    if (handle === 'rotate') {
-                        // Start rotating
-                        isRotating = true;
-                        const layer = layerManager.selectedLayer;
-                        const bounds = layer.getBounds();
-                        const centerX = bounds.left + bounds.width / 2;
-                        const centerY = bounds.top + bounds.height / 2;
-                        rotationStartAngle = Math.atan2(e.offsetY - centerY, e.offsetX - centerX);
-                        dragStartX = e.offsetX;
-                        dragStartY = e.offsetY;
-                        displayCanvas.style.cursor = 'grabbing';
-                    } else {
-                        // Start resizing
-                        isResizing = true;
-                        resizeHandle = handle;
-                        dragStartX = e.offsetX;
-                        dragStartY = e.offsetY;
-                        resizeStartBounds = layerManager.selectedLayer.getBounds();
-                        displayCanvas.style.cursor = HANDLES[handle].cursor;
-                    }
-                } else {
-                    // Check if clicking on a layer for dragging
-                    const layer = layerManager.getLayerAt(e.offsetX, e.offsetY);
-                    if (layer) {
-                        // Start dragging this layer
-                        isDragging = true;
-                        dragLayer = layer;
-                        dragStartX = e.offsetX;
-                        dragStartY = e.offsetY;
-                        dragStartLayerX = layer.x;
-                        dragStartLayerY = layer.y;
-                        
-                        // Select the layer if not already selected
-                        layerManager.selectLayer(layer.id);
-                        layerManager.renderLayers(); // Immediate render to show selection
-                        displayCanvas.style.cursor = 'move';
-                    }
-                }
-            }
-        });
-        
-        displayCanvas.addEventListener('pointermove', (e) => {
-            if (currentMode === MODES.DRAW && isDrawing) {
-                drawToCanvases((ctx, scale) => {
-                    ctx.lineTo(e.offsetX * scale, e.offsetY * scale);
-                    ctx.stroke();
-                });
-                throttledTextureUpdate();
-            } else if (currentMode === MODES.SELECT) {
-                if (isRotating && layerManager.selectedLayer) {
-                    // Handle rotation
-                    const layer = layerManager.selectedLayer;
-                    const bounds = layer.getBounds();
-                    const centerX = bounds.left + bounds.width / 2;
-                    const centerY = bounds.top + bounds.height / 2;
-                    const currentAngle = Math.atan2(e.offsetY - centerY, e.offsetX - centerX);
-                    layer.rotation += currentAngle - rotationStartAngle;
-                    rotationStartAngle = currentAngle;
-                    layerManager.renderLayers();
-                } else if (isResizing && layerManager.selectedLayer) {
-                    // Handle resizing
-                    const layer = layerManager.selectedLayer;
-                    const startBounds = resizeStartBounds;
-                    
-                    // Get current mouse position
-                    const currentX = e.offsetX;
-                    const currentY = e.offsetY;
-                    
-                    let newScaleX = layer.scaleX;
-                    let newScaleY = layer.scaleY;
-                    let newX = layer.x;
-                    let newY = layer.y;
-                    
-                    // Corner handles - resize from opposite corner with aspect ratio
-                    if (['nw', 'ne', 'sw', 'se'].includes(resizeHandle)) {
-                        let anchorX, anchorY;
-                        
-                        // Determine anchor point (opposite corner)
-                        switch (resizeHandle) {
-                            case 'nw': anchorX = startBounds.right; anchorY = startBounds.bottom; break;
-                            case 'ne': anchorX = startBounds.left; anchorY = startBounds.bottom; break;
-                            case 'sw': anchorX = startBounds.right; anchorY = startBounds.top; break;
-                            case 'se': anchorX = startBounds.left; anchorY = startBounds.top; break;
-                        }
-                        
-                        // Calculate distance from anchor to mouse
-                        const newWidth = Math.abs(currentX - anchorX);
-                        const newHeight = Math.abs(currentY - anchorY);
-                        
-                        // Maintain aspect ratio - use the smaller scale
-                        const scaleFromWidth = newWidth / layer.originalWidth;
-                        const scaleFromHeight = newHeight / layer.originalHeight;
-                        const newScale = Math.max(0.1, Math.min(scaleFromWidth, scaleFromHeight));
-                        
-                        newScaleX = newScale;
-                        newScaleY = newScale;
-                        
-                        // Position center between anchor and new corner
-                        const scaledWidth = layer.originalWidth * newScale;
-                        const scaledHeight = layer.originalHeight * newScale;
-                        
-                        if (resizeHandle === 'nw') {
-                            newX = anchorX - scaledWidth / 2;
-                            newY = anchorY - scaledHeight / 2;
-                        } else if (resizeHandle === 'ne') {
-                            newX = anchorX + scaledWidth / 2;
-                            newY = anchorY - scaledHeight / 2;
-                        } else if (resizeHandle === 'sw') {
-                            newX = anchorX - scaledWidth / 2;
-                            newY = anchorY + scaledHeight / 2;
-                        } else if (resizeHandle === 'se') {
-                            newX = anchorX + scaledWidth / 2;
-                            newY = anchorY + scaledHeight / 2;
-                        }
-                    }
-                    // Edge handles - resize only in one dimension from opposite edge
-                    else if (['n', 's', 'e', 'w'].includes(resizeHandle)) {
-                        if (resizeHandle === 'e') {
-                            // Resize width from left edge
-                            const newWidth = currentX - startBounds.left;
-                            newScaleX = Math.max(0.1, newWidth / layer.originalWidth);
-                            newX = startBounds.left + (layer.originalWidth * newScaleX) / 2;
-                        } else if (resizeHandle === 'w') {
-                            // Resize width from right edge
-                            const newWidth = startBounds.right - currentX;
-                            newScaleX = Math.max(0.1, newWidth / layer.originalWidth);
-                            newX = startBounds.right - (layer.originalWidth * newScaleX) / 2;
-                        } else if (resizeHandle === 's') {
-                            // Resize height from top edge
-                            const newHeight = currentY - startBounds.top;
-                            newScaleY = Math.max(0.1, newHeight / layer.originalHeight);
-                            newY = startBounds.top + (layer.originalHeight * newScaleY) / 2;
-                        } else if (resizeHandle === 'n') {
-                            // Resize height from bottom edge
-                            const newHeight = startBounds.bottom - currentY;
-                            newScaleY = Math.max(0.1, newHeight / layer.originalHeight);
-                            newY = startBounds.bottom - (layer.originalHeight * newScaleY) / 2;
-                        }
-                    }
-                    
-                    // Apply changes
-                    layer.scaleX = newScaleX;
-                    layer.scaleY = newScaleY;
-                    layer.x = newX;
-                    layer.y = newY;
-                    
-                    layerManager.renderLayers();
-                } else if (isDragging && dragLayer) {
-                    // Update layer position based on drag
-                    const deltaX = e.offsetX - dragStartX;
-                    const deltaY = e.offsetY - dragStartY;
-                    
-                    dragLayer.x = dragStartLayerX + deltaX;
-                    dragLayer.y = dragStartLayerY + deltaY;
-                    
-                    // Re-render with new position
-                    layerManager.renderLayers();
-                } else {
-                    // Update cursor based on what's under mouse
-                    const handle = layerManager.getResizeHandleAt(e.offsetX, e.offsetY);
-                    if (handle) {
-                        displayCanvas.style.cursor = HANDLES[handle].cursor;
-                    } else {
-                        const layer = layerManager.getLayerAt(e.offsetX, e.offsetY);
-                        displayCanvas.style.cursor = layer ? 'pointer' : 'default';
-                    }
-                }
-            }
-        });
-        
-        displayCanvas.addEventListener('pointerup', (e) => {
-            if (currentMode === MODES.DRAW) {
-                isDrawing = false;
-            } else if (currentMode === MODES.SELECT) {
-                if (isRotating) {
-                    // End rotation
-                    isRotating = false;
-                    displayCanvas.style.cursor = 'default';
-                } else if (isResizing) {
-                    // End resizing
-                    isResizing = false;
-                    resizeHandle = null;
-                    resizeStartBounds = null;
-                    displayCanvas.style.cursor = 'default';
-                } else if (isDragging) {
-                    // End dragging
-                    isDragging = false;
-                    dragLayer = null;
-                    displayCanvas.style.cursor = 'default';
-                } else {
-                    // Handle layer selection (only if not dragging)
-                    const layer = layerManager.getLayerAt(e.offsetX, e.offsetY);
-                    if (layer) {
-                        layerManager.selectLayer(layer.id);
-                        console.log('Selected layer:', layer.id);
-                    } else {
-                        layerManager.selectLayer(null);
-                        console.log('Deselected all layers');
-                    }
-                    // Re-render to show selection state
-                    layerManager.renderLayers();
-                }
-            }
-        });
-        
-        displayCanvas.addEventListener('pointerleave', () => {
-            if (currentMode === MODES.DRAW) {
-                isDrawing = false;
-            } else if (currentMode === MODES.SELECT) {
-                // Stop dragging/resizing/rotating if pointer leaves canvas
-                if (isRotating) {
-                    isRotating = false;
-                }
-                if (isResizing) {
-                    isResizing = false;
-                    resizeHandle = null;
-                    resizeStartBounds = null;
-                }
-                if (isDragging) {
-                    isDragging = false;
-                    dragLayer = null;
-                }
-                displayCanvas.style.cursor = 'default';
-            }
-        });
-        
-        // Deselect when clicking outside canvas
-        document.addEventListener('click', (e) => {
-            // Check if click is outside the display canvas
-            if (currentMode === MODES.SELECT && !displayCanvas.contains(e.target)) {
-                // Don't deselect if clicking on mode buttons or other controls
-                const isControl = e.target.closest('.mode-selector, #image-upload, button, input, select');
-                if (!isControl && layerManager.selectedLayer) {
-                    layerManager.selectLayer(null);
-                    layerManager.renderLayers();
-                }
-            }
-        });
-        
-        // Image upload
-        document.getElementById('image-upload').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const img = new Image();
-                img.onload = () => {
-                    // Calculate initial scale to fit nicely in canvas
-                    const maxSize = Math.min(512 * 0.6, Math.max(img.width, img.height)); // 60% of canvas
-                    const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-                    
-                    // Create new layer positioned at center
-                    const layer = new ImageLayer(img, {
-                        x: 256, // Center of 512x512 display canvas
-                        y: 256,
-                        scaleX: scale,
-                        scaleY: scale
-                    });
-                    
-                    layerManager.addLayer(layer);
-                    
-                    // Clean up blob URL
-                    URL.revokeObjectURL(img.src);
-                };
-                img.src = URL.createObjectURL(file);
-                
-                // Reset file input
-                e.target.value = '';
-            }
-        });
-        
-        // UI event handlers
-        document.getElementById('bg-color').addEventListener('input', (e) => {
-            scene.background.setHex(e.target.value.replace('#', '0x'));
-        });
-        
-        document.getElementById('clear-model-btn').addEventListener('click', () => {
-            if (currentModel) {
-                cleanupModel(currentModel);
-                scene.remove(currentModel);
-                currentModel = null;
-                imageMaterials = [];
-                
-                document.getElementById('clear-model-btn').style.display = 'none';
-                document.getElementById('model-controls').style.display = 'none';
-                document.getElementById('backlight-toggle').checked = false;
-                document.getElementById('status').textContent = 'Drop a GLB file to begin';
-                dropZone.classList.remove('hidden');
-            }
-        });
-        
-        document.getElementById('clear-canvas-btn').addEventListener('click', () => {
-            // Clear all layers
-            layerManager.clearLayers();
-        });
-        
-        document.getElementById('toggle-canvas-btn').addEventListener('click', () => {
-            const editor = document.getElementById('canvas-editor');
-            const isHidden = editor.style.display === 'none' || window.getComputedStyle(editor).display === 'none';
-            
-            if (isHidden) {
-                // Show the editor and ensure it's expanded
-                editor.style.display = 'flex';
-                editor.classList.remove('panel-collapsed');
-                
-                // Ensure the main panel is expanded
-                const mainPanel = editor.querySelector('.collapsible-panel.main-panel');
-                if (mainPanel) {
-                    mainPanel.classList.remove('collapsed');
-                    const toggle = mainPanel.querySelector('.panel-toggle');
-                    if (toggle) toggle.textContent = '▼';
-                }
-            } else {
-                // Hide the editor completely
-                editor.style.display = 'none';
-            }
-        });
-        
-        document.getElementById('hide-canvas-btn').addEventListener('click', () => {
-            document.getElementById('canvas-editor').style.display = 'none';
-        });
-        
-        // Mode toggle event handlers
-        document.getElementById('draw-mode-btn').addEventListener('click', () => {
-            setMode(MODES.DRAW);
-        });
-        
-        document.getElementById('select-mode-btn').addEventListener('click', () => {
-            setMode(MODES.SELECT);
-        });
-        
-        // Model control sliders
-        ['pos-x', 'pos-z'].forEach((id, index) => {
-            document.getElementById(id).addEventListener('input', (e) => {
-                if (currentModel) {
-                    const coord = index === 0 ? 'x' : 'z';
-                    currentModel.position[coord] = parseFloat(e.target.value);
-                    updateValueDisplays();
-                }
-            });
-        });
-        
-        document.getElementById('scale').addEventListener('input', (e) => {
-            if (currentModel) {
-                const scale = parseFloat(e.target.value);
-                currentModel.scale.set(scale, scale, scale);
-                updateValueDisplays();
-            }
-        });
-        
-        document.getElementById('rot-y').addEventListener('input', (e) => {
-            if (currentModel) {
-                currentModel.rotation.y = parseFloat(e.target.value) * Math.PI / 180;
-                updateValueDisplays();
-            }
-        });
-        
-        // Backlight toggle
-        document.getElementById('backlight-toggle').addEventListener('change', (e) => {
-            const backlightEnabled = e.target.checked;
-            
-            imageMaterials.forEach(material => {
-                if (backlightEnabled) {
-                    // Enable backlight glow effect
-                    material.emissive = new THREE.Color(0xffffff);
-                    material.emissiveIntensity = 0.3;
-                    material.emissiveMap = canvasTexture; // Use same texture for glow
-                } else {
-                    // Disable backlight
-                    material.emissive = new THREE.Color(0x000000);
-                    material.emissiveIntensity = 0.0;
-                    material.emissiveMap = null;
-                }
-                material.needsUpdate = true;
-            });
-        });
-        
-        // Animation loop with performance monitoring
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-            updatePerformanceMonitor();
-        }
-        
-        // Handle resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-        
-        // Initialize with device-optimized settings
-        const capabilities = detectDeviceCapabilities();
-        console.log('Device capabilities:', capabilities);
-        
-        // Target 1024x1024 but fallback if needed
-        targetQuality = capabilities.canHandle1024 ? 1024 : capabilities.optimalQuality;
-        
-        console.log(`Initializing with ${targetQuality}x${targetQuality} canvas texture`);
-        
-        initializeCanvas(targetQuality);
-        createCanvasTexture();
-        setMode(MODES.SELECT); // Initialize in select mode
-        animate();
-        
-        // Load default GLB model
-        fetch('91x91_4.glb')
-            .then(response => response.arrayBuffer())
-            .then(arrayBuffer => {
-                loader.parse(arrayBuffer, '', (gltf) => {
-                    placeModelOnFloor(gltf.scene);
-                    dropZone.classList.add('hidden');
-                }, (error) => {
-                    console.warn('Could not load default GLB:', error);
-                    // Keep drop zone visible if default model fails to load
-                });
-            })
-            .catch(error => {
-                console.warn('Default GLB file not found:', error);
-                // Keep drop zone visible if file doesn't exist
-            });
-        
-        // Memory monitoring
-        if (performance.memory) {
-            setInterval(() => {
-                const memUsed = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
-                const memLimit = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(1);
-                if (memUsed > memLimit * 0.85) {
-                    console.warn(`High memory usage: ${memUsed}MB / ${memLimit}MB`);
-                }
-            }, 10000);
-        }
-        
-        // Three.js Editor-Style UI System
-        class UIPanel {
-            constructor(element) {
-                this.element = element;
-                this.state = {};
-                this.initializeCollapsiblePanels();
-                this.initializeResizers();
-            }
-            
-            initializeCollapsiblePanels() {
-                const headers = this.element.querySelectorAll('.panel-header');
-                headers.forEach(header => {
-                    header.addEventListener('click', (e) => {
-                        const panel = header.parentElement;
-                        const panelId = header.dataset.panel;
-                        this.togglePanel(panel, panelId);
-                    });
-                });
-            }
-            
-            togglePanel(panel, panelId) {
-                const isCollapsed = panel.classList.contains('collapsed');
-                panel.classList.toggle('collapsed');
-                
-                // Store state
-                this.state[panelId] = !isCollapsed;
-                
-                // Update toggle icon
-                const toggle = panel.querySelector('.panel-toggle');
-                if (toggle) {
-                    toggle.textContent = isCollapsed ? '▼' : '▶';
-                }
-                
-                // Handle main panel collapse (entire container)
-                const header = panel.querySelector('.panel-header');
-                const targetId = header?.dataset.target;
-                if (targetId) {
-                    const targetPanel = document.getElementById(targetId);
-                    if (targetPanel) {
-                        if (!isCollapsed) {
-                            // Collapsing - make panel header-only size
-                            targetPanel.classList.add('panel-collapsed');
-                        } else {
-                            // Expanding - restore full panel
-                            targetPanel.classList.remove('panel-collapsed');
-                        }
-                    }
-                }
-            }
-            
-            initializeResizers() {
-                const resizers = this.element.querySelectorAll('.ui-resizer');
-                resizers.forEach(resizer => {
-                    this.setupResizer(resizer);
-                });
-            }
-            
-            setupResizer(resizer) {
-                let isResizing = false;
-                let startPointer = { x: 0, y: 0 };
-                let startSize = { width: 0, height: 0 };
-                
-                resizer.addEventListener('pointerdown', (e) => {
-                    e.preventDefault();
-                    isResizing = true;
-                    startPointer = { x: e.clientX, y: e.clientY };
-                    
-                    const targetPanel = document.getElementById(resizer.dataset.panel);
-                    if (targetPanel) {
-                        const rect = targetPanel.getBoundingClientRect();
-                        startSize = { width: rect.width, height: rect.height };
-                        
-                        resizer.classList.add('resizing');
-                        resizer.setPointerCapture(e.pointerId);
-                        document.body.style.cursor = resizer.classList.contains('vertical') ? 'ew-resize' : 'ns-resize';
-                    }
-                });
-                
-                resizer.addEventListener('pointermove', (e) => {
-                    if (!isResizing) return;
-                    
-                    const targetPanel = document.getElementById(resizer.dataset.panel);
-                    if (!targetPanel) return;
-                    
-                    if (resizer.classList.contains('vertical')) {
-                        // Horizontal resizing
-                        const deltaX = startPointer.x - e.clientX;
-                        const newWidth = Math.max(350, Math.min(window.innerWidth - 50, startSize.width + deltaX));
-                        targetPanel.style.width = newWidth + 'px';
-                        
-                        // Update canvas size
-                        this.updateCanvasSize(targetPanel);
-                    }
-                });
-                
-                resizer.addEventListener('pointerup', (e) => {
-                    if (!isResizing) return;
-                    
-                    isResizing = false;
-                    resizer.classList.remove('resizing');
-                    resizer.releasePointerCapture(e.pointerId);
-                    document.body.style.cursor = '';
-                });
-                
-                // Handle pointer cancel (e.g., when pointer leaves window)
-                resizer.addEventListener('pointercancel', (e) => {
-                    isResizing = false;
-                    resizer.classList.remove('resizing');
-                    document.body.style.cursor = '';
-                });
-            }
-            
-            updateCanvasSize(panel) {
-                const displayCanvas = panel.querySelector('#display-canvas');
-                if (!displayCanvas) return;
-                
-                const panelWidth = panel.offsetWidth;
-                const availableWidth = panelWidth - 50; // Account for padding and resizer
-                displayCanvas.style.maxWidth = Math.min(availableWidth, 512) + 'px';
-                
-                // Trigger layer re-rendering after size change
-                if (window.layerManager) {
-                    setTimeout(() => {
-                        window.layerManager.renderLayers();
-                    }, 50);
-                }
-            }
-        }
-        
-        // Initialize UI System
-        function initializeUISystem() {
-            // Initialize controls panel
-            const controlsPanel = document.getElementById('controls');
-            if (controlsPanel) {
-                new UIPanel(controlsPanel);
-            }
-            
-            // Initialize canvas editor panel
-            const canvasEditor = document.getElementById('canvas-editor');
-            if (canvasEditor) {
-                const uiPanel = new UIPanel(canvasEditor);
-                
-                // Update canvas size on window resize
-                window.addEventListener('resize', () => {
-                    uiPanel.updateCanvasSize(canvasEditor);
-                });
-                
-                // Initial canvas size update
-                setTimeout(() => {
-                    uiPanel.updateCanvasSize(canvasEditor);
-                }, 100);
-            }
-        }
-        
-        // Initialize UI system after page load
-        initializeUISystem();
-        
-        // Initialize quick swatches
-        displayQuickSwatches();
-        
-        // Color square functions
-        function showColorSquareDialog() {
-            document.getElementById('colorModal').style.display = 'flex';
-            updateColorPreview();
-            displayRecentColors();
-            setupColorInputListeners();
-        }
-        
-        function closeColorModal() {
-            document.getElementById('colorModal').style.display = 'none';
-        }
-        
-        function setupColorInputListeners() {
-            const modalColorPicker = document.getElementById('modalColorPicker');
-            const hexInput = document.getElementById('hexInput');
-            const redInput = document.getElementById('redInput');
-            const greenInput = document.getElementById('greenInput');
-            const blueInput = document.getElementById('blueInput');
-            const opacitySlider = document.getElementById('opacitySlider');
-            
-            // Remove existing listeners to avoid duplicates
-            modalColorPicker.removeEventListener('input', syncFromColorPicker);
-            hexInput.removeEventListener('input', syncFromHex);
-            redInput.removeEventListener('input', syncFromRGB);
-            greenInput.removeEventListener('input', syncFromRGB);
-            blueInput.removeEventListener('input', syncFromRGB);
-            opacitySlider.removeEventListener('input', updateOpacityValue);
-            
-            // Add listeners
-            modalColorPicker.addEventListener('input', syncFromColorPicker);
-            hexInput.addEventListener('input', syncFromHex);
-            redInput.addEventListener('input', syncFromRGB);
-            greenInput.addEventListener('input', syncFromRGB);
-            blueInput.addEventListener('input', syncFromRGB);
-            opacitySlider.addEventListener('input', updateOpacityValue);
-        }
-        
-        function syncFromColorPicker() {
-            const color = document.getElementById('modalColorPicker').value;
-            const rgb = hexToRgb(color);
-            
-            document.getElementById('hexInput').value = color;
-            document.getElementById('redInput').value = rgb.r;
-            document.getElementById('greenInput').value = rgb.g;
-            document.getElementById('blueInput').value = rgb.b;
-            
-            updateColorPreview();
-        }
-        
-        function syncFromHex() {
-            const hex = document.getElementById('hexInput').value;
-            if (hex.match(/^#[0-9A-F]{6}$/i)) {
-                const rgb = hexToRgb(hex);
-                
-                document.getElementById('modalColorPicker').value = hex;
-                document.getElementById('redInput').value = rgb.r;
-                document.getElementById('greenInput').value = rgb.g;
-                document.getElementById('blueInput').value = rgb.b;
-                
-                updateColorPreview();
-            }
-        }
-        
-        function syncFromRGB() {
-            const r = parseInt(document.getElementById('redInput').value) || 0;
-            const g = parseInt(document.getElementById('greenInput').value) || 0;
-            const b = parseInt(document.getElementById('blueInput').value) || 0;
-            
-            const hex = rgbToHex(r, g, b);
-            
-            document.getElementById('modalColorPicker').value = hex;
-            document.getElementById('hexInput').value = hex;
-            
-            updateColorPreview();
-        }
-        
-        function updateOpacityValue() {
-            const opacity = document.getElementById('opacitySlider').value;
-            document.getElementById('opacityValue').textContent = Math.round(opacity * 100) + '%';
-            updateColorPreview();
-        }
-        
-        function updateColorPreview() {
-            const hex = document.getElementById('hexInput').value;
-            const opacity = document.getElementById('opacitySlider').value;
-            const preview = document.getElementById('colorPreview');
-            
-            preview.style.backgroundColor = hex;
-            preview.style.opacity = opacity;
-        }
-        
-        function hexToRgb(hex) {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? {
-                r: parseInt(result[1], 16),
-                g: parseInt(result[2], 16),
-                b: parseInt(result[3], 16)
-            } : null;
-        }
-        
-        function rgbToHex(r, g, b) {
-            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-        }
-        
-        function insertColorSquare() {
-            const hex = document.getElementById('hexInput').value;
-            const opacity = parseFloat(document.getElementById('opacitySlider').value);
-            
-            // Add to recent colors
-            addToRecentColors(hex);
-            
-            // Create a canvas with the solid color square
-            const squareCanvas = document.createElement('canvas');
-            const size = 100; // 100px square
-            squareCanvas.width = size;
-            squareCanvas.height = size;
-            const squareCtx = squareCanvas.getContext('2d');
-            
-            // Fill with the selected color
-            squareCtx.fillStyle = hex;
-            squareCtx.fillRect(0, 0, size, size);
-            
-            // Create image from canvas
-            const img = new Image();
-            img.onload = () => {
-                // Create new layer positioned at center with the specified opacity
-                const layer = new ImageLayer(img, {
-                    x: 256, // Center of 512x512 display canvas
-                    y: 256,
-                    scaleX: 0.8,
-                    scaleY: 0.8,
-                    opacity: opacity
-                });
-                
-                layerManager.addLayer(layer);
-                layerManager.selectLayer(layer.id);
-            };
-            img.src = squareCanvas.toDataURL();
-            
-            closeColorModal();
-        }
-        
-        function addToRecentColors(color) {
-            // Remove color if it already exists
-            const index = recentColors.indexOf(color);
-            if (index > -1) {
-                recentColors.splice(index, 1);
-            }
-            
-            // Add to beginning
-            recentColors.unshift(color);
-            
-            // Keep only 5 most recent
-            if (recentColors.length > 5) {
-                recentColors = recentColors.slice(0, 5);
-            }
-        }
-        
-        function displayRecentColors() {
-            // Update modal swatches
-            const container = document.getElementById('recentColors');
-            container.innerHTML = '';
-            
-            recentColors.forEach(color => {
-                const swatch = document.createElement('div');
-                swatch.className = 'swatch-preview';
-                swatch.style.backgroundColor = color;
-                swatch.title = color;
-                swatch.onclick = () => useRecentColor(color);
-                container.appendChild(swatch);
-            });
-            
-            // Update quick swatches next to button
-            displayQuickSwatches();
-        }
-        
-        function displayQuickSwatches() {
-            const container = document.getElementById('quickSwatches');
-            container.innerHTML = '';
-            
-            recentColors.forEach(color => {
-                const swatch = document.createElement('div');
-                swatch.style.cssText = `
-                    width: 16px; height: 16px; border: 1px solid #555; border-radius: 2px; 
-                    cursor: pointer; background-color: ${color}; flex-shrink: 0;
-                `;
-                swatch.title = `Quick add: ${color}`;
-                swatch.onclick = () => quickInsertColor(color);
-                container.appendChild(swatch);
-            });
-        }
-        
-        function quickInsertColor(color) {
-            // Add to recent colors (moves to front)
-            addToRecentColors(color);
-            
-            // Create a canvas with the solid color square
-            const squareCanvas = document.createElement('canvas');
-            const size = 100; // 100px square
-            squareCanvas.width = size;
-            squareCanvas.height = size;
-            const squareCtx = squareCanvas.getContext('2d');
-            
-            // Fill with the selected color
-            squareCtx.fillStyle = color;
-            squareCtx.fillRect(0, 0, size, size);
-            
-            // Create image from canvas
-            const img = new Image();
-            img.onload = () => {
-                // Create new layer positioned at center with full opacity
-                const layer = new ImageLayer(img, {
-                    x: 256, // Center of 512x512 display canvas
-                    y: 256,
-                    scaleX: 0.8,
-                    scaleY: 0.8,
-                    opacity: 1
-                });
-                
-                layerManager.addLayer(layer);
-                layerManager.selectLayer(layer.id);
-            };
-            img.src = squareCanvas.toDataURL();
-        }
-        
-        function useRecentColor(color) {
-            const rgb = hexToRgb(color);
-            
-            document.getElementById('modalColorPicker').value = color;
-            document.getElementById('hexInput').value = color;
-            document.getElementById('redInput').value = rgb.r;
-            document.getElementById('greenInput').value = rgb.g;
-            document.getElementById('blueInput').value = rgb.b;
-            
-            updateColorPreview();
-        }
-        
-        // Close modal when clicking outside or pressing ESC
-        document.getElementById('colorModal').addEventListener('click', (e) => {
-            if (e.target.id === 'colorModal') {
-                closeColorModal();
-            }
-        });
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && document.getElementById('colorModal').style.display === 'flex') {
-                closeColorModal();
-            }
-        });
-        
-        // Canvas coordinate transformation helper
-        function getCanvasCoordinates(canvas, e) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            return {
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY,
-                scaleX: scaleX,
-                scaleY: scaleY
-            };
-        }
+        // All initialization is now handled by main.js
     </script>
 </body>
 </html>

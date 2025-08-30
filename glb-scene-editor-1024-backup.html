@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLB Scene Editor - High Resolution</title>
+    <style>
+        body { margin: 0; font-family: monospace; overflow: hidden; }
+        #drop-zone { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; 
+                      background: rgba(0,0,0,0.9); color: white; font-size: 24px; z-index: 100; }
+        #drop-zone.dragging { background: rgba(0,100,0,0.9); }
+        #drop-zone.hidden { display: none; }
+        #controls { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); 
+                    padding: 15px; border-radius: 5px; color: white; min-width: 250px;
+                    max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        button { margin: 5px; padding: 8px 12px; cursor: pointer; background: #4a90e2; 
+                 color: white; border: none; border-radius: 3px; }
+        button:hover { background: #357abd; }
+        #canvas-editor { position: fixed; top: 10px; right: 10px; bottom: 10px; 
+                         width: calc(100vw - 20px - 300px); max-width: 600px; min-width: 350px;
+                         background: rgba(0,0,0,0.8); padding: 15px; padding-left: 25px; border-radius: 5px; 
+                         color: white; display: none; overflow-y: auto; -webkit-overflow-scrolling: touch;
+                         display: flex; flex-direction: column; }
+        #canvas-editor:not([style*="display: none"]) { display: flex; }
+        #display-canvas { border: 2px solid #333; cursor: crosshair; background: white; }
+        #texture-canvas { display: none; } /* Hidden - used only for texture generation */
+        .quality-info { font-size: 10px; color: #888; margin-top: 5px; }
+        #canvas-controls { margin-top: 10px; }
+        input[type="color"] { width: 40px; height: 25px; margin: 5px; }
+        input[type="file"] { margin: 5px 0; }
+        #model-controls { margin-top: 15px; border-top: 1px solid #444; padding-top: 15px; display: none; }
+        .control-group { margin: 10px 0; }
+        .control-group label { display: block; font-size: 11px; margin-bottom: 3px; }
+        input[type="range"] { width: 100%; }
+        input[type="checkbox"] { margin-right: 8px; }
+        .mode-btn { margin: 2px; padding: 5px 10px; border: 1px solid #666; background: #333; color: white; cursor: pointer; }
+        .mode-btn.active { background: #4a90e2; border-color: #357abd; }
+        .mode-btn:disabled { background: #222; color: #666; cursor: not-allowed; }
+        #draw-tools { margin: 5px 0; }
+        #status { margin-top: 10px; font-size: 12px; color: #0f0; }
+        #performance-info { font-size: 10px; color: #888; margin-top: 5px; }
+        
+        /* Three.js Editor-Style Components */
+        .ui-panel { position: relative; }
+        .ui-resizer { 
+            position: absolute;
+            background: linear-gradient(to right, 
+                transparent 0%, 
+                rgba(74, 144, 226, 0.3) 30%, 
+                rgba(74, 144, 226, 0.6) 50%, 
+                rgba(74, 144, 226, 0.3) 70%, 
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            touch-action: none;
+            user-select: none;
+        }
+        .ui-resizer:hover, .ui-resizer.resizing { opacity: 1; }
+        .ui-panel:hover .ui-resizer { opacity: 0.7; }
+        
+        .ui-resizer.vertical {
+            left: 0; top: 0; bottom: 0; width: 10px;
+            cursor: ew-resize;
+            border-radius: 5px 0 0 5px;
+        }
+        
+        /* Collapsible Panel System */
+        .collapsible-panel .panel-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 10px;
+            transition: background 0.2s ease;
+            flex-shrink: 0;
+        }
+        .collapsible-panel .panel-header:hover {
+            background: rgba(255,255,255,0.1);
+            padding: 8px 5px;
+            margin: 0 -5px 10px -5px;
+            border-radius: 3px;
+        }
+        .collapsible-panel .panel-toggle {
+            margin-right: 8px;
+            font-size: 12px;
+            color: #4a90e2;
+            font-weight: bold;
+            transition: transform 0.2s ease;
+        }
+        .collapsible-panel .panel-content {
+            overflow: hidden;
+            transition: all 0.3s ease;
+            max-height: 1000px;
+        }
+        .collapsible-panel.collapsed .panel-content {
+            max-height: 0;
+            margin: 0;
+            padding: 0;
+        }
+        .collapsible-panel.collapsed .panel-toggle {
+            transform: rotate(-90deg);
+        }
+        
+        /* Special handling for main panel collapses */
+        .ui-panel.panel-collapsed {
+            height: auto !important;
+            bottom: auto !important;
+        }
+        .ui-panel.panel-collapsed .collapsible-panel:not(.main-panel) {
+            display: none;
+        }
+        
+        /* Color picker modal styles */
+        .color-modal { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.8); z-index: 2000; 
+            align-items: center; justify-content: center;
+        }
+        .color-modal-content { 
+            background: #2a2a2a; padding: 20px; border-radius: 8px; 
+            width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.8); color: white;
+            border: 1px solid #555; max-height: 90vh; overflow-y: auto;
+        }
+        .color-modal h3 { margin: 0 0 15px 0; color: white; }
+        .color-input-group { margin: 10px 0; }
+        .color-input-group label { display: block; font-size: 12px; margin-bottom: 3px; color: #ccc; }
+        .color-input-group input { width: 100%; padding: 5px; border: 1px solid #555; border-radius: 3px; 
+                                  background: #333; color: white; }
+        .color-input-group input[type="color"] { height: 40px; }
+        .color-preview { width: 100%; height: 40px; border: 1px solid #555; border-radius: 3px; margin: 10px 0; }
+        .modal-buttons { text-align: right; margin-top: 15px; }
+        .modal-buttons button { margin-left: 10px; }
+        .recent-swatches { margin: 10px 0; }
+        .swatch-preview { 
+            display: inline-block; width: 20px; height: 20px; border: 1px solid #555; 
+            border-radius: 3px; margin: 2px; cursor: pointer; 
+        }
+        .swatch-preview:hover { border-color: #4a90e2; }
+    </style>
+</head>
+<body>
+    <div id="drop-zone">Drag & Drop GLB File</div>
+    
+    <div id="controls" class="ui-panel">
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="controls" data-target="controls">
+                <span class="panel-toggle">▼</span>
+                <h3 style="margin: 0;">GLB Scene Editor</h3>
+            </div>
+            <div class="panel-content">
+                <div class="control-group">
+                    <label>Background Color:</label>
+                    <input type="color" id="bg-color" value="#cccccc">
+                </div>
+                <button id="clear-model-btn" style="display:none;">Remove Model</button>
+                <div id="status">Drop a GLB file to begin</div>
+                <div id="performance-info">Performance: Ready</div>
+                
+                <div id="model-controls" class="collapsible-panel">
+                    <div class="panel-header" data-panel="model-controls">
+                        <span class="panel-toggle">▼</span>
+                        <h4 style="margin: 0;">Model Controls</h4>
+                    </div>
+                    <div class="panel-content">
+                        <div class="control-group">
+                            <label>Position X: <span id="pos-x-val">0</span></label>
+                            <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
+                            <label>Position Z: <span id="pos-z-val">0</span></label>
+                            <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
+                        </div>
+                        <div class="control-group">
+                            <label>Scale: <span id="scale-val">1.0</span></label>
+                            <input type="range" id="scale" min="0.1" max="5" step="0.1" value="1">
+                        </div>
+                        <div class="control-group">
+                            <label>Rotation Y: <span id="rot-y-val">0°</span></label>
+                            <input type="range" id="rot-y" min="0" max="360" step="5" value="0">
+                        </div>
+                        <div class="control-group">
+                            <label>
+                                <input type="checkbox" id="backlight-toggle"> Backlight
+                            </label>
+                        </div>
+                        <button id="toggle-canvas-btn">Show Canvas Editor</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="canvas-editor" class="ui-panel">
+        <div class="ui-resizer vertical" data-panel="canvas-editor"></div>
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="canvas-editor-content" data-target="canvas-editor">
+                <span class="panel-toggle">▼</span>
+                <h4 style="margin: 0;">High-Resolution Texture Editor</h4>
+            </div>
+            <div class="panel-content" style="flex: 1; display: flex; flex-direction: column;">
+                <canvas id="display-canvas" width="512" height="512" style="max-width: 100%; height: auto; width: auto;"></canvas>
+                <canvas id="texture-canvas" width="1024" height="1024"></canvas>
+                <div id="canvas-controls">
+            <div id="mode-controls" style="margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 10px;">
+                <button id="draw-mode-btn" class="mode-btn">✏️ Draw</button>
+                <button id="select-mode-btn" class="mode-btn active">🔲 Select</button>
+            </div>
+            <div id="draw-tools">
+                <input type="color" id="brush-color" value="#ff0000" title="Brush Color">
+            </div>
+            <div id="image-tools">
+                <input type="file" id="image-upload" accept="image/*" title="Upload Image">
+                <div style="display: flex; align-items: center; gap: 8px; margin: 5px 0;">
+                    <button onclick="showColorSquareDialog()">Add Color Square</button>
+                    <div id="quickSwatches" style="display: flex; gap: 2px;"></div>
+                </div>
+            </div>
+            <button id="clear-canvas-btn">Clear</button>
+            <button id="hide-canvas-btn">Hide</button>
+        </div>
+        <div style="font-size: 11px; color: #aaa; margin-top: 10px;">
+            Draw or upload images to texture "Image" materials
+        </div>
+        <div class="quality-info" id="quality-info">Resolution: 1024x1024 (High Quality)</div>
+    </div>
+
+    <!-- Color picker modal - moved outside canvas-editor -->
+    <div id="colorModal" class="color-modal">
+        <div class="color-modal-content">
+            <h3>Add Color Square</h3>
+            
+            <div class="color-input-group">
+                <label>Color Picker:</label>
+                <input type="color" id="modalColorPicker" value="#ff0000">
+            </div>
+            
+            <div class="color-input-group">
+                <label>Hex Code:</label>
+                <input type="text" id="hexInput" value="#ff0000" maxlength="7">
+            </div>
+            
+            <div class="color-input-group">
+                <label>Red (0-255):</label>
+                <input type="number" id="redInput" value="255" min="0" max="255">
+            </div>
+            
+            <div class="color-input-group">
+                <label>Green (0-255):</label>
+                <input type="number" id="greenInput" value="0" min="0" max="255">
+            </div>
+            
+            <div class="color-input-group">
+                <label>Blue (0-255):</label>
+                <input type="number" id="blueInput" value="0" min="0" max="255">
+            </div>
+            
+            <div class="color-input-group">
+                <label>Opacity:</label>
+                <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="1">
+                <span id="opacityValue">100%</span>
+            </div>
+            
+            <div class="color-preview" id="colorPreview"></div>
+            
+            <div class="recent-swatches">
+                <label>Recent Colors:</label>
+                <div id="recentColors"></div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button onclick="closeColorModal()">Cancel</button>
+                <button class="primary-btn" onclick="insertColorSquare()">Insert Color</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="scene-manager.js"></script>
+    <script src="model-loader.js"></script>
+    <script src="canvas-editor.js"></script>
+    <script src="layer-manager.js"></script>
+    <script src="ui-controls.js"></script>
+    <script src="main.js"></script>
+    <script>
+        // All initialization is now handled by main.js
+            performanceMonitor.frameCount++;
+            const currentTime = performance.now();
+            
+            if (currentTime >= performanceMonitor.lastTime + 1000) {
+                const fps = Math.round(
+                    (performanceMonitor.frameCount * 1000) / (currentTime - performanceMonitor.lastTime)
+                );
+                performanceMonitor.averageFPS = fps;
+                performanceMonitor.frameCount = 0;
+                performanceMonitor.lastTime = currentTime;
+                
+                // Update performance display
+                document.getElementById('performance-info').textContent = 
+                    `Performance: ${fps} FPS (${window.currentQuality}x${window.currentQuality})`;
+                
+                // Auto-fallback if severe performance issues
+                if (fps < 30 && window.currentQuality > 512) {
+                    console.warn('Performance critical, reducing to 512x512');
+                    fallbackToLowerQuality(512);
+                } else if (fps < 20 && window.currentQuality > 256) {
+                    console.warn('Performance critical, reducing to 256x256');
+                    fallbackToLowerQuality(256);
+                }
+            }
+        }
+        
+        function fallbackToLowerQuality(newQuality) {
+            if (newQuality >= window.currentQuality) return;
+            
+            console.log(`Auto-scaling from ${window.currentQuality}x${window.currentQuality} to ${newQuality}x${newQuality}`);
+            
+            const previousImageData = textureCtx.getImageData(0, 0, window.currentQuality, window.currentQuality);
+            initializeCanvas(newQuality);
+            
+            // Scale and preserve content
+            if (previousImageData) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = previousImageData.width;
+                tempCanvas.height = previousImageData.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.putImageData(previousImageData, 0, 0);
+                
+                textureCtx.drawImage(tempCanvas, 0, 0, window.currentQuality, window.currentQuality);
+            }
+            
+            createCanvasTexture();
+            
+            // Update all materials
+            if (window.imageMaterials) {
+                window.imageMaterials.forEach(material => {
+                    material.map = canvasTexture;
+                    material.needsUpdate = true;
+                });
+            }
+        }
+        
+        // Drag and drop
+        const dropZone = document.getElementById('drop-zone');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); });
+        });
+        
+        document.addEventListener('dragenter', () => dropZone.classList.add('dragging'));
+        document.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+        
+        document.addEventListener('drop', (e) => {
+            dropZone.classList.remove('dragging');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.toLowerCase().endsWith('.glb')) {
+                dropZone.classList.add('hidden');
+                loadGLBFile(file, scene);
+            }
+        });
+        
+        
+        
+        
+        
+        
+        
+        // Animation loop with performance monitoring
+        function animateWithMonitoring() {
+            requestAnimationFrame(animateWithMonitoring);
+            controls.update();
+            renderer.render(scene, camera);
+            updatePerformanceMonitor();
+        }
+        
+        
+        // Initialize with device-optimized settings
+        const capabilities = detectDeviceCapabilities();
+        console.log('Device capabilities:', capabilities);
+        
+        // Target 1024x1024 but fallback if needed
+        targetQuality = capabilities.canHandle1024 ? 1024 : capabilities.optimalQuality;
+        
+        console.log(`Initializing with ${targetQuality}x${targetQuality} canvas texture`);
+        
+        initializeCanvas(targetQuality);
+        createCanvasTexture();
+        setDrawingMode(MODES.SELECT); // Initialize in select mode
+        
+        // Setup model control listeners and canvas mode handlers
+        setupModelControlListeners();
+        setupModeEventHandlers();
+        
+        // Initialize UI system and controls
+        setupUISystem();
+        initializeControls();
+        
+        animateWithMonitoring();
+        
+        // Load default GLB model
+        loadDefaultGLB('91x91_4.glb', scene);
+        
+        // Memory monitoring
+        if (performance.memory) {
+            setInterval(() => {
+                const memUsed = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
+                const memLimit = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(1);
+                if (memUsed > memLimit * 0.85) {
+                    console.warn(`High memory usage: ${memUsed}MB / ${memLimit}MB`);
+                }
+            }, 10000);
+        }
+        
+        
+        
+    </script>
+</body>
+</html>
