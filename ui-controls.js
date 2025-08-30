@@ -360,7 +360,7 @@ function addToRecentColors(color) {
     
     // Keep only 5 most recent
     if (recentColors.length > 5) {
-        recentColors = recentColors.slice(0, 5);
+        recentColors.splice(5);
     }
 }
 

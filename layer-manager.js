@@ -40,7 +40,6 @@ class ImageLayer {
         };
     }
     
-    
     // Check if point is inside this layer (x,y in display canvas coordinates)
     hitTest(x, y) {
         const bounds = this.getBounds();
@@ -99,7 +98,6 @@ class LayerManager {
         return null;
     }
     
-    
     clearLayers() {
         this.layers = [];
         this.selectedLayer = null;
@@ -107,14 +105,14 @@ class LayerManager {
     }
     
     renderLayers() {
+        // Render to display canvas
         if (window.displayCtx) {
             this.renderToCanvas(window.displayCtx, 512);
         }
-        if (window.textureCtx && window.currentQuality) {
-            this.renderToCanvas(window.textureCtx, window.currentQuality);
-        }
-        if (window.throttledTextureUpdate) {
-            window.throttledTextureUpdate();
+        
+        // Render to UV texture editor
+        if (window.uvTextureEditor) {
+            this.renderToUVTexture(window.uvTextureEditor);
         }
     }
     
@@ -158,6 +156,43 @@ class LayerManager {
             }
             
             ctx.restore();
+        });
+    }
+    
+    // New UV-based rendering method
+    renderToUVTexture(uvEditor) {
+        // Clear UV texture
+        uvEditor.clear();
+        
+        // Render each layer in UV space
+        this.layers.forEach(layer => {
+            if (!layer.visible) return;
+            
+            // Convert layer coordinates to UV space
+            const layerUV = {
+                u: layer.x / 512, // Convert display coords to UV
+                v: layer.y / 512
+            };
+            
+            // Draw layer at UV coordinates
+            uvEditor.drawAtUV(layerUV.u, layerUV.v, (ctx, x, y) => {
+                ctx.save();
+                ctx.globalAlpha = layer.opacity;
+                
+                // Calculate scaled dimensions
+                const width = layer.originalWidth * layer.scaleX;
+                const height = layer.originalHeight * layer.scaleY;
+                
+                // Apply transformations
+                ctx.translate(x, y);
+                if (layer.rotation) {
+                    ctx.rotate(layer.rotation);
+                }
+                
+                // Draw image centered at transform origin
+                ctx.drawImage(layer.image, -width/2, -height/2, width, height);
+                ctx.restore();
+            });
         });
     }
 }

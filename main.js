@@ -9,49 +9,51 @@ let performanceMonitor = {
 };
 
 // Device capability detection
-function detectDeviceCapabilities() {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    
-    if (!gl) {
-        console.warn('WebGL not available - falling back to minimal settings');
-        return { 
-            maxTextureSize: 512, 
-            isMobile: true, 
-            hardwareConcurrency: 1,
-            estimatedVRAM: 128,
-            renderer: 'Unknown',
+function detectDeviceCapabilities(renderer) {
+    // Use Three.js built-in capabilities if renderer is available
+    if (!renderer) {
+        console.warn('Renderer not available - using fallback capabilities');
+        return {
+            maxTextureSize: 512,
+            maxAnisotropy: 1,
             canHandle1024: false,
-            optimalQuality: 256 
+            optimalQuality: 256,
+            pixelRatio: 1
         };
     }
     
-    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    const renderer_info = gl.getExtension('WEBGL_debug_renderer_info');
-    const renderer = renderer_info ? gl.getParameter(renderer_info.UNMASKED_RENDERER_WEBGL) : 'Unknown';
-    const vendor = renderer_info ? gl.getParameter(renderer_info.UNMASKED_VENDOR_WEBGL) : 'Unknown';
-    
+    const capabilities = renderer.capabilities;
     const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const hardwareConcurrency = navigator.hardwareConcurrency || 4;
     
-    // Estimate VRAM (very rough)
-    let estimatedVRAM = 512; // Default assumption
-    if (isMobile) {
-        estimatedVRAM = 256;
-    } else if (renderer.toLowerCase().includes('nvidia') || renderer.toLowerCase().includes('amd')) {
-        estimatedVRAM = 2048;
-    }
+    // Use Three.js built-in capability detection
+    const maxTextureSize = capabilities.maxTextureSize;
+    const maxAnisotropy = renderer.getMaxAnisotropy();
+    const precision = capabilities.precision;
+    const maxAttributes = capabilities.maxAttributes;
+    const maxVertexUniforms = capabilities.maxVertexUniforms;
     
-    const canHandle1024 = !isMobile && maxTextureSize >= 2048 && estimatedVRAM >= 1024 && hardwareConcurrency >= 4;
+    // Three.js informed quality assessment
+    const hasHighPerformance = !isMobile && 
+                              maxTextureSize >= 2048 && 
+                              maxAnisotropy >= 4 && 
+                              precision === 'highp';
+    
+    const canHandle1024 = hasHighPerformance && (navigator.hardwareConcurrency || 4) >= 4;
+    
+    // Use Three.js recommended pixel ratio clamping
+    const optimalPixelRatio = Math.min(window.devicePixelRatio, 2);
     
     return {
         maxTextureSize,
-        isMobile,
-        hardwareConcurrency,
-        estimatedVRAM,
-        renderer: renderer_info,
+        maxAnisotropy,
+        precision,
+        maxAttributes,
+        maxVertexUniforms,
         canHandle1024,
-        optimalQuality: canHandle1024 ? 1024 : (isMobile ? 256 : 512)
+        optimalQuality: canHandle1024 ? 1024 : (isMobile ? 256 : 512),
+        pixelRatio: optimalPixelRatio,
+        isMobile,
+        renderer: capabilities
     };
 }
 
@@ -67,10 +69,11 @@ function updatePerformanceMonitor() {
         performanceMonitor.frameCount = 0;
         performanceMonitor.lastTime = currentTime;
         
-        // Update performance display
+        // Update performance display with Three.js renderer info
         const performanceInfo = document.getElementById('performance-info');
-        if (performanceInfo) {
-            performanceInfo.textContent = `Performance: ${fps} FPS (${window.currentQuality}x${window.currentQuality})`;
+        if (performanceInfo && window.renderer) {
+            const info = window.renderer.info;
+            performanceInfo.textContent = `Performance: ${fps} FPS | Calls: ${info.render.calls} | Triangles: ${info.render.triangles} (${window.currentQuality}x${window.currentQuality})`;
         }
         
         // Auto-fallback if severe performance issues
@@ -114,30 +117,24 @@ function fallbackToLowerQuality(newQuality) {
     }
 }
 
+// UV-based texture creation - no longer needed as UVTextureEditor handles this
 function createCanvasTexture() {
-    if (window.canvasTexture) window.canvasTexture.dispose();
-    window.canvasTexture = new THREE.CanvasTexture(window.textureCanvas);
-    
-    // Aggressive optimization for high-resolution
-    window.canvasTexture.format = THREE.RGBFormat; // Save 25% memory
-    window.canvasTexture.flipY = false;
-    window.canvasTexture.magFilter = THREE.LinearFilter;
-    window.canvasTexture.minFilter = THREE.LinearFilter;
-    window.canvasTexture.generateMipmaps = false; // Critical performance save
-    window.canvasTexture.wrapS = THREE.ClampToEdgeWrapping;
-    window.canvasTexture.wrapT = THREE.ClampToEdgeWrapping;
-    window.canvasTexture.unpackAlignment = 1;
-    window.canvasTexture.needsUpdate = true;
-    
-    // Apply to existing materials
-    if (window.imageMaterials) {
-        window.imageMaterials.forEach(material => {
-            material.map = window.canvasTexture;
-            material.needsUpdate = true;
-        });
+    // The UV texture editor now handles texture creation
+    if (window.uvTextureEditor) {
+        window.canvasTexture = window.uvTextureEditor.getTexture();
+        
+        // Apply to existing materials
+        if (window.imageMaterials) {
+            window.imageMaterials.forEach(material => {
+                material.map = window.canvasTexture;
+                material.needsUpdate = true;
+            });
+        }
+        
+        return window.canvasTexture;
     }
     
-    return window.canvasTexture;
+    return null;
 }
 
 // Animation loop with performance monitoring
@@ -189,16 +186,19 @@ function initializeApplication() {
     window.renderer = renderer;
     window.controls = controls; // Available from scene-manager
     
-    // 2. Setup canvases and drawing system
-    const { displayCanvas, textureCanvas, displayCtx, textureCtx } = setupCanvases();
+    // 2. Setup UV-based canvas and drawing system
+    const { displayCanvas, uvTextureEditor, displayCtx } = setupCanvases();
     
     // 3. Initialize layer management
     const layerManager = new LayerManager();
     window.layerManager = layerManager;
     
-    // 4. Detect device capabilities and optimize settings
-    const capabilities = detectDeviceCapabilities();
-    console.log('Device capabilities:', capabilities);
+    // 4. Detect device capabilities using Three.js built-ins
+    const capabilities = detectDeviceCapabilities(renderer);
+    console.log('Three.js Device capabilities:', capabilities);
+    
+    // Apply Three.js optimizations based on capabilities
+    renderer.setPixelRatio(capabilities.pixelRatio);
     
     // Target 1024x1024 but fallback if needed
     const targetQuality = capabilities.canHandle1024 ? 1024 : capabilities.optimalQuality;

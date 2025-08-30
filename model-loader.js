@@ -10,7 +10,10 @@ function loadGLBFile(file, scene) {
             placeModelOnFloor(gltf.scene, scene);
         }, (error) => {
             console.error('Error loading GLB:', error);
-            document.getElementById('status').textContent = 'Error loading GLB file';
+            const status = document.getElementById('status');
+            if (status) {
+                status.textContent = 'Error loading GLB file';
+            }
         });
     };
     reader.readAsArrayBuffer(file);
@@ -43,38 +46,66 @@ function placeModelOnFloor(model, scene) {
         model.scale.setScalar(scale);
     }
     
-    // Find and apply textures to "Image" materials
+    // Find and apply textures to "Image" materials using Three.js patterns
     imageMaterials = [];
+    const processedMaterials = new Set();
+    
     model.traverse((child) => {
         if (child.isMesh && child.material) {
-            const matName = child.material.name || '';
-            if (matName.toLowerCase().includes('image')) {
-                imageMaterials.push(child.material);
-                // Apply canvasTexture if available globally
-                if (window.canvasTexture) {
-                    child.material.map = window.canvasTexture;
+            // Handle both single materials and material arrays
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            
+            materials.forEach(material => {
+                // Avoid processing the same material multiple times
+                if (!processedMaterials.has(material.uuid)) {
+                    processedMaterials.add(material.uuid);
+                    
+                    const matName = material.name || '';
+                    if (matName.toLowerCase().includes('image')) {
+                        imageMaterials.push(material);
+                        
+                        // Apply canvasTexture if available globally
+                        if (window.canvasTexture) {
+                            material.map = window.canvasTexture;
+                        }
+                        
+                        // Three.js material optimization for texture editing
+                        material.transparent = true;
+                        material.alphaTest = 0.001; // Better than full transparency
+                        material.depthWrite = true;
+                        material.side = THREE.FrontSide; // Performance optimization
+                        
+                        // Initialize backlight properties
+                        material.emissive = new THREE.Color(0x000000);
+                        material.emissiveIntensity = 0.0;
+                        material.emissiveMap = null;
+                        
+                        material.needsUpdate = true;
+                    }
                 }
-                
-                // Initialize backlight properties
-                child.material.emissive = new THREE.Color(0x000000);
-                child.material.emissiveIntensity = 0.0;
-                child.material.emissiveMap = null;
-                
-                child.material.needsUpdate = true;
-            }
+            });
+            
             child.castShadow = true;
             child.receiveShadow = true;
         }
     });
     
     // Reset backlight toggle
-    document.getElementById('backlight-toggle').checked = false;
+    const backlightToggle = document.getElementById('backlight-toggle');
+    if (backlightToggle) {
+        backlightToggle.checked = false;
+    }
     
     // Update UI
-    document.getElementById('clear-model-btn').style.display = 'block';
-    document.getElementById('model-controls').style.display = 'block';
-    document.getElementById('status').textContent = 
-        `Loaded model (${imageMaterials.length} Image materials found)`;
+    const clearModelBtn = document.getElementById('clear-model-btn');
+    const modelControls = document.getElementById('model-controls');
+    const status = document.getElementById('status');
+    
+    if (clearModelBtn) clearModelBtn.style.display = 'block';
+    if (modelControls) modelControls.style.display = 'block';
+    if (status) {
+        status.textContent = `Loaded model (${imageMaterials.length} Image materials found)`;
+    }
     
     updateModelControls(model);
     
@@ -206,9 +237,13 @@ function setupModelControlListeners() {
                 imageMaterials = [];
                 
                 clearModelBtn.style.display = 'none';
-                document.getElementById('model-controls').style.display = 'none';
-                document.getElementById('backlight-toggle').checked = false;
-                document.getElementById('status').textContent = 'Drop a GLB file to begin';
+                const modelControls = document.getElementById('model-controls');
+                const backlightToggle = document.getElementById('backlight-toggle');
+                const status = document.getElementById('status');
+                
+                if (modelControls) modelControls.style.display = 'none';
+                if (backlightToggle) backlightToggle.checked = false;
+                if (status) status.textContent = 'Drop a GLB file to begin';
                 
                 const dropZone = document.getElementById('drop-zone');
                 if (dropZone) dropZone.classList.remove('hidden');

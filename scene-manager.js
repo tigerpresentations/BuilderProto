@@ -1,4 +1,4 @@
-// Scene setup variables
+// Scene setup variables (exported to window global scope)
 let scene, camera, renderer, controls;
 let ambientLight, directionalLight, floor;
 
@@ -15,11 +15,27 @@ function setupCamera() {
 }
 
 function setupRenderer() {
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Three.js optimized renderer setup
+    renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        powerPreference: "high-performance", // Better GPU selection
+        stencil: false, // Performance optimization if not needed
+        depth: true
+    });
+    
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Clamp to 2 for performance
+    
+    // Three.js color management and tone mapping
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    
+    // Optimized shadow settings
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false; // Manual control for performance
+    
     document.body.appendChild(renderer.domElement);
     
     // Setup OrbitControls
@@ -35,15 +51,29 @@ function setupRenderer() {
     directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(10, 10, 5);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.setScalar(2048);
+    // Optimize shadow map size based on device capabilities
+    const shadowMapSize = Math.min(2048, renderer.capabilities.maxTextureSize / 4);
+    directionalLight.shadow.mapSize.setScalar(shadowMapSize);
+    
+    // Optimize shadow camera settings
+    directionalLight.shadow.camera.near = 0.1;
+    directionalLight.shadow.camera.far = 50;
+    directionalLight.shadow.camera.left = -10;
+    directionalLight.shadow.camera.right = 10;
+    directionalLight.shadow.camera.top = 10;
+    directionalLight.shadow.camera.bottom = -10;
     scene.add(directionalLight);
     
-    // Floor plane
+    // Floor plane with Three.js material optimizations
     const floorGeometry = new THREE.PlaneGeometry(20, 20);
     const floorMaterial = new THREE.MeshStandardMaterial({ 
         color: 0x808080, 
         roughness: 0.8,
-        metalness: 0.1 
+        metalness: 0.1,
+        // Performance optimizations
+        side: THREE.FrontSide,
+        transparent: false,
+        alphaTest: 0
     });
     floor = new THREE.Mesh(floorGeometry, floorMaterial);
     floor.rotation.x = -Math.PI / 2;
