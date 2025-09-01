@@ -138,6 +138,37 @@
             </div>
         </div>
         
+        <!-- Authentication -->
+        <div class="collapsible-panel">
+            <div class="panel-header" data-panel="auth-controls">
+                <span>User Authentication</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <div id="authSection">
+                    <form id="loginForm" style="display: block;">
+                        <div class="control-group">
+                            <label>Email</label>
+                            <input type="email" id="loginEmail" placeholder="your@email.com" required>
+                        </div>
+                        <div class="control-group">
+                            <label>Password</label>
+                            <input type="password" id="loginPassword" placeholder="Password" required>
+                        </div>
+                        <button type="submit" style="width: 100%; margin-top: 8px;">Login</button>
+                    </form>
+                    <div id="userInfo" style="display: none;">
+                        <div class="control-group">
+                            <p style="font-size: 11px; color: #28a745; margin: 0;">
+                                ✓ Logged in as: <span id="userEmail"></span>
+                            </p>
+                            <button id="logoutBtn" style="width: 100%; margin-top: 8px; background: #dc3545; border-color: #dc3545;">Logout</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Status -->
         <div class="control-group">
             <div id="status" style="font-size: 10px; color: #666;">Drop a GLB file to begin</div>
@@ -245,6 +276,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
+    <script src="env.js"></script>
+    <script src="auth.js"></script>
     <script src="scene-manager.js"></script>
     <script src="model-loader.js"></script>
     <script src="canvas-editor.js"></script>

@@ -1,9 +1,10 @@
 [build]
   publish = "."
+  command = "node inject-env.js"
 
 [[redirects]]
   from = "/"
-  to = "/initialTests/integrated-scene.html"
+  to = "/glb-scene-editor-1024.html"
   status = 200
 
 [[headers]]

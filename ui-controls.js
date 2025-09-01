@@ -3,6 +3,27 @@
 // Color square state
 let recentColors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
 
+// Authentication integration helpers
+function showNotification(message, type = 'info', duration = 3000) {
+    // Simple notification for auth feedback
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed; top: 20px; right: 20px; z-index: 1000;
+        padding: 12px 20px; border-radius: 4px;
+        background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007bff'};
+        color: white; font-size: 12px; max-width: 300px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => document.body.removeChild(notification), 300);
+    }, duration);
+}
+
 // Three.js Editor-Style UI System
 class UIPanel {
     constructor(element) {
