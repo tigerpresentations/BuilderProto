@@ -92,6 +92,9 @@ function fallbackToLowerQuality(newQuality) {
     
     console.log(`Auto-scaling from ${window.currentQuality}x${window.currentQuality} to ${newQuality}x${newQuality}`);
     
+    // Update global quality setting
+    window.currentQuality = newQuality;
+    
     const previousImageData = window.textureCtx.getImageData(0, 0, window.currentQuality, window.currentQuality);
     initializeCanvas(newQuality);
     
@@ -189,9 +192,17 @@ function initializeApplication() {
     // 2. Setup UV-based canvas and drawing system
     const { displayCanvas, uvTextureEditor, displayCtx } = setupCanvases();
     
-    // 3. Initialize layer management
-    const layerManager = new LayerManager();
+    // 3. Initialize simple layer management (no scaling complexity)
+    const layerManager = new SimpleLayerManager();
     window.layerManager = layerManager;
+    
+    // 3.5. Initialize simple interactive editor 
+    const interactiveEditor = new SimpleInteractiveEditor(
+        displayCanvas,
+        layerManager
+    );
+    layerManager.interactiveEditor = interactiveEditor;
+    window.interactiveEditor = interactiveEditor;
     
     // 4. Detect device capabilities using Three.js built-ins
     const capabilities = detectDeviceCapabilities(renderer);
@@ -204,7 +215,7 @@ function initializeApplication() {
     const targetQuality = capabilities.canHandle1024 ? 1024 : capabilities.optimalQuality;
     console.log(`Initializing with ${targetQuality}x${targetQuality} canvas texture`);
     
-    // 5. Initialize canvas with optimized quality
+    // 5. Initialize canvas with simple quality system
     window.currentQuality = targetQuality;
     initializeCanvas(targetQuality);
     createCanvasTexture();

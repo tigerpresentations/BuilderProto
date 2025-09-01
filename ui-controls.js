@@ -350,13 +350,13 @@ function insertColorSquare() {
     // Create image from canvas
     const img = new Image();
     img.onload = () => {
-        // Create new layer positioned at center with the specified opacity (display coordinates)
-        if (window.ImageLayer && window.layerManager) {
-            const layer = new window.ImageLayer(img, {
-                x: 256, // Center in display space (512/2)
-                y: 256, // Center in display space (512/2)
-                scaleX: 0.8,
-                scaleY: 0.8,
+        // Create new layer positioned at center with simple 512x512 coordinates
+        if (window.SimpleImageLayer && window.layerManager) {
+            const layer = new window.SimpleImageLayer(img, {
+                x: 256, // Center in 512x512 space
+                y: 256, // Center in 512x512 space
+                width: size * 0.8,
+                height: size * 0.8,
                 opacity: opacity
             });
             
@@ -441,13 +441,13 @@ function quickInsertColor(color) {
     // Create image from canvas
     const img = new Image();
     img.onload = () => {
-        // Create new layer positioned at center with full opacity (display coordinates)
-        if (window.ImageLayer && window.layerManager) {
-            const layer = new window.ImageLayer(img, {
-                x: 256, // Center in display space (512/2)
-                y: 256, // Center in display space (512/2)
-                scaleX: 0.8,
-                scaleY: 0.8,
+        // Create new layer positioned at center with simple 512x512 coordinates
+        if (window.SimpleImageLayer && window.layerManager) {
+            const layer = new window.SimpleImageLayer(img, {
+                x: 256, // Center in 512x512 space
+                y: 256, // Center in 512x512 space
+                width: size * 0.8,
+                height: size * 0.8,
                 opacity: 1
             });
             
@@ -487,16 +487,16 @@ function initializeControls() {
                 const img = new Image();
                 img.onload = () => {
                     // Calculate initial scale to fit nicely in canvas
-                    const maxSize = Math.min(512 * 0.6, Math.max(img.width, img.height)); // 60% of canvas
+                    const maxSize = Math.min(512 * 0.85, Math.max(img.width, img.height)); // 85% of canvas
                     const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
                     
-                    // Create new layer positioned at center (display coordinates)
-                    if (window.ImageLayer && window.layerManager) {
-                        const layer = new window.ImageLayer(img, {
-                            x: 256, // Center in display space (512/2)
-                            y: 256, // Center in display space (512/2)
-                            scaleX: scale,
-                            scaleY: scale
+                    // Create new layer positioned at center using simple 512x512 coordinates
+                    if (window.SimpleImageLayer && window.layerManager) {
+                        const layer = new window.SimpleImageLayer(img, {
+                            x: 256, // Center in 512x512 space
+                            y: 256, // Center in 512x512 space
+                            width: img.width * scale,
+                            height: img.height * scale
                         });
                         
                         window.layerManager.addLayer(layer);

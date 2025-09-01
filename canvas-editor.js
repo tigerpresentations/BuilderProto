@@ -154,7 +154,9 @@ class UVTextureEditor {
         if (!this.pendingUpdate) {
             this.pendingUpdate = true;
             requestAnimationFrame(() => {
-                this.texture.needsUpdate = true;
+                if (this.texture) {
+                    this.texture.needsUpdate = true;
+                }
                 this.pendingUpdate = false;
             });
         }
