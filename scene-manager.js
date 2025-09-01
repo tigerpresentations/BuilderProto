@@ -1,6 +1,34 @@
 // Scene setup variables (exported to window global scope)
 let scene, camera, renderer, controls;
-let ambientLight, directionalLight, floor;
+let hemisphereLight, mainLight, fillLight, floor;
+
+// Lighting configuration object for dev panel
+window.lightingConfig = {
+    hemisphere: {
+        skyColor: 0x87ceeb,
+        groundColor: 0x362f28,
+        intensity: 0.4
+    },
+    mainLight: {
+        color: 0xffffff,
+        intensity: 1.2,
+        position: { x: 8, y: 12, z: 6 },
+        castShadow: true
+    },
+    fillLight: {
+        color: 0xffffff,
+        intensity: 0.3,
+        position: { x: -5, y: 8, z: -3 },
+        castShadow: false
+    },
+    shadows: {
+        mapSize: 2048,
+        cameraSize: 5,
+        bias: -0.0005,
+        normalBias: 0.02
+    },
+    toneMappingExposure: 1.0
+};
 
 function setupScene() {
     scene = new THREE.Scene();
@@ -44,25 +72,8 @@ function setupRenderer() {
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI * 0.8;
     
-    // Setup lighting
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    
-    directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 10, 5);
-    directionalLight.castShadow = true;
-    // Optimize shadow map size based on device capabilities
-    const shadowMapSize = Math.min(2048, renderer.capabilities.maxTextureSize / 4);
-    directionalLight.shadow.mapSize.setScalar(shadowMapSize);
-    
-    // Optimize shadow camera settings
-    directionalLight.shadow.camera.near = 0.1;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -10;
-    directionalLight.shadow.camera.right = 10;
-    directionalLight.shadow.camera.top = 10;
-    directionalLight.shadow.camera.bottom = -10;
-    scene.add(directionalLight);
+    // Setup improved lighting system
+    setupLighting();
     
     // Floor plane with Three.js material optimizations
     const floorGeometry = new THREE.PlaneGeometry(20, 20);
@@ -91,6 +102,108 @@ function setupRenderer() {
     return renderer;
 }
 
+function setupLighting() {
+    const config = window.lightingConfig;
+    
+    // Replace harsh ambient light with natural hemisphere lighting
+    hemisphereLight = new THREE.HemisphereLight(
+        config.hemisphere.skyColor, 
+        config.hemisphere.groundColor, 
+        config.hemisphere.intensity
+    );
+    scene.add(hemisphereLight);
+    
+    // Main directional light (key light)
+    mainLight = new THREE.DirectionalLight(config.mainLight.color, config.mainLight.intensity);
+    mainLight.position.set(config.mainLight.position.x, config.mainLight.position.y, config.mainLight.position.z);
+    mainLight.castShadow = config.mainLight.castShadow;
+    
+    // Optimized shadow settings for better quality
+    const shadowMapSize = Math.min(config.shadows.mapSize, renderer.capabilities.maxTextureSize / 4);
+    mainLight.shadow.mapSize.setScalar(shadowMapSize);
+    mainLight.shadow.camera.near = 0.1;
+    mainLight.shadow.camera.far = 50;
+    
+    // Tighter shadow camera frustum for better resolution
+    const size = config.shadows.cameraSize;
+    mainLight.shadow.camera.left = -size;
+    mainLight.shadow.camera.right = size;
+    mainLight.shadow.camera.top = size;
+    mainLight.shadow.camera.bottom = -size;
+    
+    // Shadow bias to reduce artifacts
+    mainLight.shadow.bias = config.shadows.bias;
+    mainLight.shadow.normalBias = config.shadows.normalBias;
+    
+    // Update shadow camera projection matrix - this fixes the dark box issue
+    mainLight.shadow.camera.updateProjectionMatrix();
+    
+    scene.add(mainLight);
+    
+    // Fill light for softer shadows and better contrast
+    fillLight = new THREE.DirectionalLight(config.fillLight.color, config.fillLight.intensity);
+    fillLight.position.set(config.fillLight.position.x, config.fillLight.position.y, config.fillLight.position.z);
+    fillLight.castShadow = config.fillLight.castShadow;
+    scene.add(fillLight);
+    
+    // Update tone mapping exposure
+    renderer.toneMappingExposure = config.toneMappingExposure;
+    
+    // Force shadow map update and enable auto-update to prevent initial artifacts
+    renderer.shadowMap.needsUpdate = true;
+    renderer.shadowMap.autoUpdate = true;
+    
+    // Ensure all existing objects in scene have proper shadow properties
+    scene.traverse((child) => {
+        if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+    
+    // Force an immediate render to initialize shadows properly
+    if (window.scene && window.camera) {
+        renderer.render(window.scene, window.camera);
+    }
+}
+
+function updateLighting() {
+    const config = window.lightingConfig;
+    
+    // Update hemisphere light
+    hemisphereLight.color.setHex(config.hemisphere.skyColor);
+    hemisphereLight.groundColor.setHex(config.hemisphere.groundColor);
+    hemisphereLight.intensity = config.hemisphere.intensity;
+    
+    // Update main light
+    mainLight.color.setHex(config.mainLight.color);
+    mainLight.intensity = config.mainLight.intensity;
+    mainLight.position.set(config.mainLight.position.x, config.mainLight.position.y, config.mainLight.position.z);
+    
+    // Update shadow camera size
+    const size = config.shadows.cameraSize;
+    mainLight.shadow.camera.left = -size;
+    mainLight.shadow.camera.right = size;
+    mainLight.shadow.camera.top = size;
+    mainLight.shadow.camera.bottom = -size;
+    mainLight.shadow.camera.updateProjectionMatrix();
+    
+    // Update shadow bias
+    mainLight.shadow.bias = config.shadows.bias;
+    mainLight.shadow.normalBias = config.shadows.normalBias;
+    
+    // Update fill light
+    fillLight.color.setHex(config.fillLight.color);
+    fillLight.intensity = config.fillLight.intensity;
+    fillLight.position.set(config.fillLight.position.x, config.fillLight.position.y, config.fillLight.position.z);
+    
+    // Update tone mapping exposure
+    renderer.toneMappingExposure = config.toneMappingExposure;
+    
+    // Force shadow map update
+    renderer.shadowMap.needsUpdate = true;
+}
+
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -102,3 +215,4 @@ window.setupScene = setupScene;
 window.setupCamera = setupCamera;
 window.setupRenderer = setupRenderer;
 window.animate = animate;
+window.updateLighting = updateLighting;

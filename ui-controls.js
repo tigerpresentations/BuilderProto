@@ -570,6 +570,16 @@ function initializeControls() {
         });
     }
     
+    // Lighting dev console button
+    const lightingDevBtn = document.getElementById('lighting-dev-btn');
+    if (lightingDevBtn) {
+        lightingDevBtn.addEventListener('click', () => {
+            if (window.lightingConsole) {
+                window.lightingConsole.toggle();
+            }
+        });
+    }
+    
     // Color modal event handlers
     const colorModal = document.getElementById('colorModal');
     if (colorModal) {
@@ -591,6 +601,301 @@ function initializeControls() {
     displayQuickSwatches();
 }
 
+// Lighting Developer Console
+class LightingDevConsole {
+    constructor() {
+        this.isVisible = false;
+        this.createPanel();
+        this.initializeControls();
+    }
+    
+    createPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'lighting-dev-console';
+        panel.style.cssText = `
+            position: fixed; top: 20px; left: 20px; width: 320px; z-index: 1001;
+            background: rgba(40, 40, 40, 0.95); border: 1px solid #666;
+            border-radius: 8px; padding: 15px; font-family: monospace;
+            color: #fff; font-size: 12px; display: none;
+            max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        `;
+        
+        panel.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #555; padding-bottom: 10px;">
+                <h3 style="margin: 0; color: #4CAF50;">Lighting Dev Console</h3>
+                <button onclick="window.lightingConsole.hide()" style="background: #666; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer;">×</button>
+            </div>
+            
+            <!-- Hemisphere Light -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #2196F3;">Hemisphere Light</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Sky Color: <input type="color" id="skyColor" value="#87ceeb" style="width: 40px; margin-left: 5px;"></label>
+                    <label>Ground Color: <input type="color" id="groundColor" value="#362f28" style="width: 40px; margin-left: 5px;"></label>
+                    <label>Intensity: <input type="range" id="hemisphereIntensity" min="0" max="1" step="0.05" value="0.4" style="width: 80px;"> <span id="hemisphereValue">0.4</span></label>
+                </div>
+            </div>
+            
+            <!-- Main Light -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #FF9800;">Main Light</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Color: <input type="color" id="mainColor" value="#ffffff" style="width: 40px; margin-left: 5px;"></label>
+                    <label>Intensity: <input type="range" id="mainIntensity" min="0" max="2" step="0.1" value="1.2" style="width: 80px;"> <span id="mainValue">1.2</span></label>
+                    <label>X: <input type="range" id="mainX" min="-15" max="15" step="0.5" value="8" style="width: 60px;"> <span id="mainXValue">8</span></label>
+                    <label>Y: <input type="range" id="mainY" min="5" max="20" step="0.5" value="12" style="width: 60px;"> <span id="mainYValue">12</span></label>
+                    <label>Z: <input type="range" id="mainZ" min="-15" max="15" step="0.5" value="6" style="width: 60px;"> <span id="mainZValue">6</span></label>
+                </div>
+            </div>
+            
+            <!-- Fill Light -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #9C27B0;">Fill Light</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Color: <input type="color" id="fillColor" value="#ffffff" style="width: 40px; margin-left: 5px;"></label>
+                    <label>Intensity: <input type="range" id="fillIntensity" min="0" max="1" step="0.05" value="0.3" style="width: 80px;"> <span id="fillValue">0.3</span></label>
+                    <label>X: <input type="range" id="fillX" min="-15" max="15" step="0.5" value="-5" style="width: 60px;"> <span id="fillXValue">-5</span></label>
+                    <label>Y: <input type="range" id="fillY" min="5" max="20" step="0.5" value="8" style="width: 60px;"> <span id="fillYValue">8</span></label>
+                    <label>Z: <input type="range" id="fillZ" min="-15" max="15" step="0.5" value="-3" style="width: 60px;"> <span id="fillZValue">-3</span></label>
+                </div>
+            </div>
+            
+            <!-- Shadow Settings -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #F44336;">Shadow Settings</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Camera Size: <input type="range" id="shadowSize" min="2" max="10" step="0.5" value="5" style="width: 60px;"> <span id="shadowSizeValue">5</span></label>
+                    <label>Bias: <input type="range" id="shadowBias" min="-0.002" max="0.002" step="0.0001" value="-0.0005" style="width: 60px;"> <span id="shadowBiasValue">-0.0005</span></label>
+                    <label>Normal Bias: <input type="range" id="normalBias" min="0" max="0.1" step="0.005" value="0.02" style="width: 60px;"> <span id="normalBiasValue">0.02</span></label>
+                </div>
+            </div>
+            
+            <!-- Tone Mapping -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #4CAF50;">Tone Mapping</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Exposure: <input type="range" id="exposure" min="0.1" max="3" step="0.1" value="1.0" style="width: 80px;"> <span id="exposureValue">1.0</span></label>
+                </div>
+            </div>
+            
+            <!-- Preset Buttons -->
+            <div style="margin-top: 15px; border-top: 1px solid #555; padding-top: 10px;">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button onclick="window.lightingConsole.loadPreset('studio')" style="background: #2196F3; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Studio</button>
+                    <button onclick="window.lightingConsole.loadPreset('outdoor')" style="background: #4CAF50; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Outdoor</button>
+                    <button onclick="window.lightingConsole.loadPreset('soft')" style="background: #FF9800; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Soft</button>
+                    <button onclick="window.lightingConsole.loadPreset('dramatic')" style="background: #F44336; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Dramatic</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(panel);
+        this.panel = panel;
+    }
+    
+    initializeControls() {
+        // Add change listeners to all controls
+        const controls = [
+            'skyColor', 'groundColor', 'hemisphereIntensity',
+            'mainColor', 'mainIntensity', 'mainX', 'mainY', 'mainZ',
+            'fillColor', 'fillIntensity', 'fillX', 'fillY', 'fillZ',
+            'shadowSize', 'shadowBias', 'normalBias', 'exposure'
+        ];
+        
+        controls.forEach(id => {
+            const element = this.panel.querySelector(`#${id}`);
+            if (element) {
+                element.addEventListener('input', () => {
+                    this.updateLightingFromControls();
+                    this.updateValueDisplays();
+                });
+            }
+        });
+        
+        // Initial value display update
+        this.updateValueDisplays();
+    }
+    
+    updateValueDisplays() {
+        const updates = [
+            ['hemisphereIntensity', 'hemisphereValue'],
+            ['mainIntensity', 'mainValue'],
+            ['mainX', 'mainXValue'],
+            ['mainY', 'mainYValue'],
+            ['mainZ', 'mainZValue'],
+            ['fillIntensity', 'fillValue'],
+            ['fillX', 'fillXValue'],
+            ['fillY', 'fillYValue'],
+            ['fillZ', 'fillZValue'],
+            ['shadowSize', 'shadowSizeValue'],
+            ['shadowBias', 'shadowBiasValue'],
+            ['normalBias', 'normalBiasValue'],
+            ['exposure', 'exposureValue']
+        ];
+        
+        updates.forEach(([inputId, displayId]) => {
+            const input = this.panel.querySelector(`#${inputId}`);
+            const display = this.panel.querySelector(`#${displayId}`);
+            if (input && display) {
+                display.textContent = input.value;
+            }
+        });
+    }
+    
+    updateLightingFromControls() {
+        if (!window.lightingConfig) return;
+        
+        const config = window.lightingConfig;
+        
+        // Update hemisphere light
+        config.hemisphere.skyColor = parseInt(this.panel.querySelector('#skyColor').value.replace('#', ''), 16);
+        config.hemisphere.groundColor = parseInt(this.panel.querySelector('#groundColor').value.replace('#', ''), 16);
+        config.hemisphere.intensity = parseFloat(this.panel.querySelector('#hemisphereIntensity').value);
+        
+        // Update main light
+        config.mainLight.color = parseInt(this.panel.querySelector('#mainColor').value.replace('#', ''), 16);
+        config.mainLight.intensity = parseFloat(this.panel.querySelector('#mainIntensity').value);
+        config.mainLight.position.x = parseFloat(this.panel.querySelector('#mainX').value);
+        config.mainLight.position.y = parseFloat(this.panel.querySelector('#mainY').value);
+        config.mainLight.position.z = parseFloat(this.panel.querySelector('#mainZ').value);
+        
+        // Update fill light
+        config.fillLight.color = parseInt(this.panel.querySelector('#fillColor').value.replace('#', ''), 16);
+        config.fillLight.intensity = parseFloat(this.panel.querySelector('#fillIntensity').value);
+        config.fillLight.position.x = parseFloat(this.panel.querySelector('#fillX').value);
+        config.fillLight.position.y = parseFloat(this.panel.querySelector('#fillY').value);
+        config.fillLight.position.z = parseFloat(this.panel.querySelector('#fillZ').value);
+        
+        // Update shadow settings
+        config.shadows.cameraSize = parseFloat(this.panel.querySelector('#shadowSize').value);
+        config.shadows.bias = parseFloat(this.panel.querySelector('#shadowBias').value);
+        config.shadows.normalBias = parseFloat(this.panel.querySelector('#normalBias').value);
+        
+        // Update tone mapping
+        config.toneMappingExposure = parseFloat(this.panel.querySelector('#exposure').value);
+        
+        // Apply changes to Three.js scene
+        if (window.updateLighting) {
+            window.updateLighting();
+        }
+    }
+    
+    loadPreset(presetName) {
+        const presets = {
+            studio: {
+                hemisphere: { skyColor: 0x87ceeb, groundColor: 0x362f28, intensity: 0.4 },
+                mainLight: { color: 0xffffff, intensity: 1.2, position: { x: 8, y: 12, z: 6 } },
+                fillLight: { color: 0xffffff, intensity: 0.3, position: { x: -5, y: 8, z: -3 } },
+                shadows: { cameraSize: 5, bias: -0.0005, normalBias: 0.02 },
+                toneMappingExposure: 1.0
+            },
+            outdoor: {
+                hemisphere: { skyColor: 0x74c0fc, groundColor: 0x495057, intensity: 0.6 },
+                mainLight: { color: 0xfff3e0, intensity: 1.5, position: { x: 10, y: 15, z: 8 } },
+                fillLight: { color: 0x74c0fc, intensity: 0.2, position: { x: -8, y: 10, z: -5 } },
+                shadows: { cameraSize: 6, bias: -0.0003, normalBias: 0.015 },
+                toneMappingExposure: 1.2
+            },
+            soft: {
+                hemisphere: { skyColor: 0xffffff, groundColor: 0xc8c8c8, intensity: 0.5 },
+                mainLight: { color: 0xffffff, intensity: 0.8, position: { x: 6, y: 10, z: 4 } },
+                fillLight: { color: 0xffffff, intensity: 0.5, position: { x: -4, y: 6, z: -2 } },
+                shadows: { cameraSize: 4, bias: -0.0008, normalBias: 0.025 },
+                toneMappingExposure: 0.8
+            },
+            dramatic: {
+                hemisphere: { skyColor: 0x1a1a1a, groundColor: 0x0a0a0a, intensity: 0.2 },
+                mainLight: { color: 0xffffff, intensity: 2.0, position: { x: 12, y: 15, z: 10 } },
+                fillLight: { color: 0x444488, intensity: 0.15, position: { x: -10, y: 5, z: -8 } },
+                shadows: { cameraSize: 3, bias: -0.0002, normalBias: 0.01 },
+                toneMappingExposure: 1.5
+            }
+        };
+        
+        const preset = presets[presetName];
+        if (!preset) return;
+        
+        // Update global config
+        Object.assign(window.lightingConfig, preset);
+        
+        // Update UI controls
+        this.updateControlsFromConfig();
+        
+        // Apply to scene
+        if (window.updateLighting) {
+            window.updateLighting();
+        }
+    }
+    
+    updateControlsFromConfig() {
+        const config = window.lightingConfig;
+        
+        // Update hemisphere
+        this.panel.querySelector('#skyColor').value = '#' + config.hemisphere.skyColor.toString(16).padStart(6, '0');
+        this.panel.querySelector('#groundColor').value = '#' + config.hemisphere.groundColor.toString(16).padStart(6, '0');
+        this.panel.querySelector('#hemisphereIntensity').value = config.hemisphere.intensity;
+        
+        // Update main light
+        this.panel.querySelector('#mainColor').value = '#' + config.mainLight.color.toString(16).padStart(6, '0');
+        this.panel.querySelector('#mainIntensity').value = config.mainLight.intensity;
+        this.panel.querySelector('#mainX').value = config.mainLight.position.x;
+        this.panel.querySelector('#mainY').value = config.mainLight.position.y;
+        this.panel.querySelector('#mainZ').value = config.mainLight.position.z;
+        
+        // Update fill light
+        this.panel.querySelector('#fillColor').value = '#' + config.fillLight.color.toString(16).padStart(6, '0');
+        this.panel.querySelector('#fillIntensity').value = config.fillLight.intensity;
+        this.panel.querySelector('#fillX').value = config.fillLight.position.x;
+        this.panel.querySelector('#fillY').value = config.fillLight.position.y;
+        this.panel.querySelector('#fillZ').value = config.fillLight.position.z;
+        
+        // Update shadows
+        this.panel.querySelector('#shadowSize').value = config.shadows.cameraSize;
+        this.panel.querySelector('#shadowBias').value = config.shadows.bias;
+        this.panel.querySelector('#normalBias').value = config.shadows.normalBias;
+        
+        // Update tone mapping
+        this.panel.querySelector('#exposure').value = config.toneMappingExposure;
+        
+        this.updateValueDisplays();
+    }
+    
+    show() {
+        this.panel.style.display = 'block';
+        this.isVisible = true;
+        this.updateControlsFromConfig();
+    }
+    
+    hide() {
+        this.panel.style.display = 'none';
+        this.isVisible = false;
+    }
+    
+    toggle() {
+        if (this.isVisible) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+}
+
+// Initialize lighting console and add keyboard shortcut
+function initializeLightingConsole() {
+    window.lightingConsole = new LightingDevConsole();
+    
+    // Add keyboard shortcut (Alt+L)
+    document.addEventListener('keydown', (e) => {
+        if (e.altKey && e.key.toLowerCase() === 'l' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            window.lightingConsole.toggle();
+        }
+    });
+    
+    console.log('Lighting Dev Console initialized. Press Alt+L to open.');
+}
+
 // Export functions
 window.setupUISystem = setupUISystem;
 window.initializeControls = initializeControls;
@@ -598,3 +903,4 @@ window.showColorSquareDialog = showColorSquareDialog;
 window.closeColorModal = closeColorModal;
 window.insertColorSquare = insertColorSquare;
 window.recentColors = recentColors;
+window.initializeLightingConsole = initializeLightingConsole;

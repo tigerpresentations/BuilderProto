@@ -218,6 +218,9 @@ function initializeApplication() {
     setupUISystem();
     initializeControls();
     
+    // 7.5. Initialize lighting dev console
+    initializeLightingConsole();
+    
     // 8. Setup drag and drop
     setupDragAndDrop();
     
