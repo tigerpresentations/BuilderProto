@@ -115,7 +115,7 @@ function placeModelOnFloor(model, scene) {
     
     updateModelControls(model);
     
-    // Focus camera
+    // Focus camera (original positioning without animation)
     const modelCenter = new THREE.Vector3();
     box.getCenter(modelCenter);
     modelCenter.y = size.y * 0.5;
@@ -282,6 +282,78 @@ window.updateModelControls = updateModelControls;
 window.setupModelControlListeners = setupModelControlListeners;
 window.loadDefaultGLB = loadDefaultGLB;
 window.cleanupModel = cleanupModel;
+window.centerCameraOnModel = centerCameraOnModel;
+window.setupModelDoubleClickHandler = setupModelDoubleClickHandler;
+
+// Smooth camera animation functions
+function centerCameraOnModel(model, boundingBox, size) {
+    if (!window.camera || !window.controls) {
+        console.warn('Camera or controls not available for centering');
+        return;
+    }
+    
+    // Calculate the bounding box center and size
+    const center = boundingBox.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    
+    // Calculate distance to achieve ~75% viewport coverage
+    const fov = window.camera.fov * (Math.PI / 180); // Convert to radians
+    const distance = maxDim / (2 * Math.tan(fov / 2)) * 1.1; // 1.1 factor for ~75% coverage
+    
+    // Position camera in front of the model (negative Z relative to model center)
+    const newPosition = new THREE.Vector3(center.x, center.y, center.z + distance);
+    
+    // Animate camera to new position, looking at model center
+    animateCamera(newPosition, center);
+}
+
+function animateCamera(targetPosition, targetLookAt, duration = 1000) {
+    if (!window.camera || !window.controls) return;
+    
+    const startPosition = window.camera.position.clone();
+    const startTarget = window.controls.target.clone();
+    const startTime = performance.now();
+    
+    function animate(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing function (ease-in-out)
+        const easeProgress = progress < 0.5 
+            ? 2 * progress * progress 
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        
+        // Interpolate camera position
+        window.camera.position.lerpVectors(startPosition, targetPosition, easeProgress);
+        
+        // Interpolate controls target
+        window.controls.target.lerpVectors(startTarget, targetLookAt, easeProgress);
+        
+        // Update controls
+        window.controls.update();
+        
+        // Continue animation if not complete
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        }
+    }
+    
+    requestAnimationFrame(animate);
+}
+
+// Double-click handler for camera centering
+function setupModelDoubleClickHandler() {
+    if (!window.renderer || !window.renderer.domElement) return;
+    
+    window.renderer.domElement.addEventListener('dblclick', (event) => {
+        if (currentModel) {
+            // Calculate bounding box for current model
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const size = box.getSize(new THREE.Vector3());
+            centerCameraOnModel(currentModel, box, size);
+        }
+    });
+}
 
 // Make variables available globally with proper referencing
 Object.defineProperty(window, 'currentModel', {

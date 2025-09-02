@@ -7,8 +7,8 @@ class ImageLayer {
         this.image = image;
         this.uvX = 0.5;           // Center position (0-1 UV space)
         this.uvY = 0.5;
-        this.uvWidth = Math.min(0.3, image.width / 1024);   // Size in UV space
-        this.uvHeight = Math.min(0.3, image.height / 1024);
+        this.uvWidth = Math.min(0.75, image.width / 1024);   // Size in UV space
+        this.uvHeight = Math.min(0.75, image.height / 1024);
         this.rotation = 0;
         this.opacity = 1;
         this.visible = true;
@@ -130,7 +130,12 @@ class SimpleLayerManager {
             this.selectedLayer = null;
         }
         
-        this.renderLayers();
+        // Show selection UI when selecting a layer
+        if (this.selectedLayer) {
+            this.renderWithSelection();
+        } else {
+            this.renderLayers();
+        }
         this.updateLayerList();
         return this.selectedLayer;
     }
@@ -141,6 +146,16 @@ class SimpleLayerManager {
             this.selectedLayer = null;
         }
         this.renderLayers();
+        this.updateLayerList();
+    }
+    
+    // Clear selection and render without UI elements for clean texture
+    clearSelectionAndRenderClean() {
+        if (this.selectedLayer) {
+            this.selectedLayer.selected = false;
+            this.selectedLayer = null;
+        }
+        this.renderLayers(); // This renders clean without selection
         this.updateLayerList();
     }
     
@@ -209,14 +224,26 @@ class SimpleLayerManager {
             }
         }
         
-        // Draw selection and handles for selected layer
-        if (this.selectedLayer) {
-            this.drawSelection(ctx, canvasSize);
-        }
-        
-        // Update Three.js texture
+        // Update Three.js texture (no selection drawing here)
         if (window.uvTextureEditor) {
             window.uvTextureEditor.updateTexture();
+        }
+        
+        if (window.canvasTexture) {
+            window.canvasTexture.needsUpdate = true;
+        }
+    }
+    
+    // Render selection UI separately (call this for UI display only)
+    renderWithSelection() {
+        // First render clean layers
+        this.renderLayers();
+        
+        // Then add selection overlay on same canvas for UI display only  
+        const displayCanvas = document.getElementById('display-canvas');
+        if (displayCanvas && this.selectedLayer) {
+            const ctx = displayCanvas.getContext('2d');
+            this.drawSelection(ctx, displayCanvas.width);
         }
     }
     

@@ -4,91 +4,215 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Three.js-based 3D scene editor prototype that demonstrates real-time texture editing on GLB/GLTF models. The project consists of several HTML experiments that showcase different aspects of the texture pipeline and 3D model manipulation.
+BuilderProto is a professional-grade Three.js-based 3D texture editing application that enables real-time texture manipulation on GLB/GLTF models. The project demonstrates advanced implementations of canvas-to-texture pipelines, adaptive performance optimization, and intuitive user interfaces for 3D content creation.
 
 ## Core Architecture
 
-### Main Components
+### Main Application
 
-1. **integrated-scene.html** - Primary application combining all features:
-   - GLB/GLTF model loading with automatic "Image" material detection
-   - Real-time canvas-to-texture pipeline (256x256 canvas)
-   - Image upload and manipulation (scale, position)
-   - Object transforms (position, rotation, scale)
-   - Scene state serialization/deserialization
-   - File-based persistence (works without localStorage)
+**index.html** (formerly glb-scene-editor-1024.html) - Primary application with comprehensive features:
+- GLB/GLTF model loading with drag-and-drop support
+- Automatic material detection (finds materials with "Image" in the name)
+- Real-time canvas-to-texture pipeline (1024x1024 with adaptive fallback to 512x512 or 256x256)
+- UV-based layer system for resolution-independent image manipulation
+- 8-handle resize system for precise layer control
+- Professional lighting system with developer console (Alt+L)
+- Performance monitoring with automatic quality adjustments
+- Supabase authentication integration
+- Scene state serialization/deserialization with file-based persistence
 
-2. **Experimental Components**:
-   - **canvas-texture-pipeline.html** - Demonstrates real-time canvas drawing to 3D texture
-   - **surface-detector.html** - Detects and highlights materials with specific naming patterns
-   - **design-state-manager.html** - Scene state serialization with file download/upload
+**glb-scene-editor-1024-backup.html** - Simplified backup version for fallback scenarios
 
-### Key Technical Details
+### JavaScript Modules
 
-- **Texture Orientation**: Canvas textures use `flipY = false` for GLB compatibility
-- **Material Detection**: Scans for materials with "Image" in the name (case-insensitive)
-- **Memory Management**: Proper disposal of geometries and materials when replacing models
-- **Browser Compatibility**: Works with `file://` protocol (no localStorage dependency)
+The application uses a modular architecture with window globals for cross-module communication:
 
-## Development Commands
+1. **main.js** - Application orchestrator
+   - Device capability detection using Three.js renderer
+   - Performance monitoring with FPS tracking
+   - Adaptive quality system (automatic canvas resolution fallback)
+   - Module coordination and initialization
 
-Since this is a standalone HTML/JavaScript project with no build system:
+2. **scene-manager.js** - Three.js scene management
+   - Professional 3-light setup (hemisphere, directional key light, fill light)
+   - OrbitControls integration
+   - Renderer optimization with pixel ratio clamping
+   - Shadow mapping for realistic rendering
 
-```bash
-# Open any HTML file directly in a browser
-open integrated-scene.html  # macOS
-# or
-start integrated-scene.html  # Windows
-# or simply drag the HTML file to your browser
+3. **model-loader.js** - GLB/GLTF loading system
+   - Automatic material detection with UUID-based deduplication
+   - Proper geometry and material disposal
+   - Support for both single materials and material arrays
 
-# Test with the included GLB files
-# Default model: 91x91.glb (loaded automatically if present)
-```
+4. **simple-layer-manager.js** - UV-based layer system
+   - ImageLayer class with resolution-independent positioning
+   - Hit testing for selection
+   - Z-order management
+   - Efficient compositing to canvas
 
-## Testing Workflow
+5. **simple-interactive-editor.js** - Mouse interaction handler
+   - Drag and resize operations
+   - 8-handle resize system (corners + edges)
+   - Cursor state management
+   - Event coordination
 
-1. Open `integrated-scene.html` in a browser
-2. The system will attempt to load `91x91.glb` automatically
-3. Upload any GLB/GLTF file to test material detection
-4. Materials named "Image" will automatically receive canvas texture
-5. Use the canvas editor to draw or upload images
-6. Test scene saving/loading with Download/Load Scene buttons
+6. **ui-controls.js** - User interface system
+   - Collapsible panels with resize handles
+   - Developer lighting console with presets (Studio, Outdoor, Soft, Dramatic)
+   - File upload handlers
+   - Real-time value displays
 
-## Important Implementation Notes
+7. **auth.js** - Authentication integration
+   - Supabase email/password authentication
+   - Session management
+   - Login/logout functionality
+
+## Key Technical Details
+
+### Performance Optimization
+- Three.js renderer optimizations (pixel ratio clamping to max 2)
+- Adaptive canvas resolution based on device capabilities
+- FPS monitoring with performance.memory API
+- Automatic quality degradation when FPS drops below 30
+- Proper Three.js resource disposal
 
 ### Canvas-to-Texture Pipeline
 - Uses `THREE.CanvasTexture` with `needsUpdate` flag for real-time updates
-- Texture filters set to `LinearFilter` without mipmaps for performance
-- Target 60 FPS with immediate texture updates on canvas changes
+- Texture orientation: `flipY = false` for GLB compatibility
+- Filters set to `LinearFilter` without mipmaps for performance
+- Target 60 FPS with immediate texture updates
 
-### GLB Material Detection
+### Material Detection
 ```javascript
 // Materials are detected with this pattern:
-if (materialName.toLowerCase() === 'image' || materialName.toLowerCase().includes('image')) {
+if (materialName.toLowerCase().includes('image')) {
     // Apply canvas texture to this material
 }
 ```
 
-### Scene Serialization Format
-- GLB data embedded as base64 DataURL
-- Canvas content saved as image DataURL  
-- Complete transform and camera state preserved
-- JSON format with version field for compatibility
+### UV-Based Coordinate System
+- All layer positions use 0-1 UV space
+- Resolution-independent rendering
+- Automatic scaling based on canvas size
+- Consistent behavior across different devices
+
+## Development Commands
+
+```bash
+# Open the application
+open index.html  # macOS
+start index.html  # Windows
+
+# Development server (if using)
+python -m http.server 8000  # Python 3
+# or
+npx http-server
+
+# Test with included GLB files
+# Default model: 91x91_4.glb (loaded automatically if present)
+```
+
+## Testing Workflow
+
+1. Open `index.html` in a browser
+2. The system will attempt to load `91x91_4.glb` automatically if present
+3. Drag and drop any GLB/GLTF file or use the file picker
+4. Materials with "Image" in their name will automatically receive the canvas texture
+5. Use the canvas editor to add/manipulate image layers
+6. Test the developer lighting console with Alt+L
+7. Monitor performance metrics in the UI
+8. Test scene saving/loading with Download/Load Scene buttons
 
 ## File Structure
 
-All files are self-contained HTML with embedded JavaScript. No external dependencies except CDN-loaded Three.js libraries:
+```
+BuilderProto/
+├── index.html                    # Main application
+├── glb-scene-editor-1024-backup.html  # Backup version
+├── main.js                       # Application orchestrator
+├── scene-manager.js              # Three.js scene setup
+├── model-loader.js               # GLB/GLTF loading
+├── simple-layer-manager.js       # UV-based layer system
+├── simple-interactive-editor.js  # Mouse interactions
+├── ui-controls.js                # UI components
+├── auth.js                       # Supabase authentication
+├── .claude/docs/                 # Project documentation
+│   ├── project_overview.md
+│   ├── file-relationships.md
+│   └── current-issues.md
+└── 91x91_4.glb                     # Default test model
+```
+
+## External Dependencies
+
+All loaded via CDN:
 - Three.js r128
 - GLTFLoader
 - OrbitControls
+- Supabase Client Library
 
-## Known Issues and Considerations
+## Browser Requirements
 
-- Large GLB files may create large JSON save files due to base64 encoding
-- Canvas size fixed at 256x256 for performance
+- Modern browser with WebGL support
+- File API for save/load functionality
+- ES6 JavaScript support
+- Canvas 2D context support
+
+## Known Limitations
+
+- Large GLB files create large JSON save files due to base64 encoding
 - Browser memory limits may affect very large models
-- File API required for save/load functionality
-- When communicating with Agents, remind them that simple, clever solutions are preferred over overly complex methods. They should look for standard solutions to problems rather than trying to solve it with novel code. Reinforce that they should focus on the requested topic, and not get distracted by new features and systems unless they are the clear, obvious, and easy solution to the problem. Advanced features are not the end goal here -- this is not a technical excercise to see how advanced we can be; eventually I hope for this to be a usable tool. Stability, maintainability, and reliability should always be an important factor in their recommendations.
-- Do not adjust the overall UI without explicit instruction from the user prompt.
-- do not maintain legacy methods. This is an un-released product, there are no legacy methods.
-- When editing code, be sure to check the implications of your changes on other files. Breaking features is not acceptable.
+- Touch events not fully optimized (mouse-first design)
+- Maximum canvas size: 1024x1024 (with automatic fallback)
+
+## Development Guidelines
+
+When working on this codebase:
+
+1. **Simplicity First**: Prefer simple, standard solutions over complex novel approaches
+2. **Stability**: This will be a production tool - prioritize reliability and maintainability
+3. **Performance**: Always consider performance implications, especially for real-time updates
+4. **No Legacy Code**: This is an unreleased product - remove rather than maintain old code
+5. **Test Impact**: Always verify changes don't break existing features
+6. **UI Consistency**: Don't modify the UI without explicit instruction
+7. **Focus**: Stay on the requested task, avoid feature creep
+
+## Documentation Maintenance System
+
+### **Documentation Update Protocol**
+When making changes to source code, **always update related documentation**:
+
+1. **Identify affected docs** - which `.claude/docs/` files relate to your changes
+2. **Update immediately** - don't defer documentation updates
+3. **Version control docs** - commit documentation changes with code changes
+4. **Validate accuracy** - ensure docs match current implementation
+
+### **Required Updates for Common Changes**
+
+| Change Type | Files to Update |
+|-------------|----------------|
+| New feature added | `project-overview.md`, relevant research docs |
+| File structure changes | `file-relationships.md`, `project-overview.md` |
+| Performance issues discovered | `current-issues.md`, performance research docs |
+| Integration problems | Relevant integration research docs |
+| Deployment changes | Deployment optimization docs |
+
+## Agent Communication
+
+When communicating with AI agents about this project:
+- Emphasize simple solutions, standard and proven approaches over novelty and complexity. 
+- Remind them this is meant to be a usable tool, not a technical showcase
+- Stability, maintainability, and reliability are paramount
+- Advanced features are not the goal - working features are
+
+## Maintenance Notes
+
+**Last Updated**: YYYY-MM-DD [Update this date when making changes]
+**Next Review**: YYYY-MM-DD [Set reminder to review documentation currency]
+
+**Critical Reminders**:
+- Update this file when architectural decisions change
+- Keep `.claude/docs/` synchronized with actual implementation
+- Test documentation accuracy during each development cycle
+- Archive outdated research when approaches change
+- Diligently update your documentation in .claude/docs/active

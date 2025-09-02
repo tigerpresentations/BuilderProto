@@ -20,12 +20,47 @@ class SimpleInteractiveEditor {
     }
     
     setupEventListeners() {
+        // Only mousedown starts on canvas - move and up will be promoted to document during active operations
         this.canvas.addEventListener('mousedown', this.boundMouseDown);
-        this.canvas.addEventListener('mousemove', this.boundMouseMove);
-        this.canvas.addEventListener('mouseup', this.boundMouseUp);
-        this.canvas.addEventListener('mouseleave', this.boundMouseUp);
+        this.canvas.addEventListener('mousemove', this.boundMouseMove);  // For hover effects when not dragging
         this.canvas.addEventListener('contextmenu', e => e.preventDefault());
         this.canvas.addEventListener('dragstart', e => e.preventDefault());
+        
+        // Add keyboard support for clearing selection
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.layerManager.clearSelectionAndRenderClean();
+            }
+        });
+    }
+    
+    // Promote mouse events to document level during active drag/resize operations
+    promoteToGlobalEvents() {
+        // Remove canvas events to prevent conflicts
+        this.canvas.removeEventListener('mousemove', this.boundMouseMove);
+        
+        // Add document-level events that work anywhere on the page
+        document.addEventListener('mousemove', this.boundMouseMove);
+        document.addEventListener('mouseup', this.boundMouseUp);
+        
+        // Prevent text selection during drag operations
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = this.canvas.style.cursor;
+    }
+    
+    // Return to canvas-only events when operation completes
+    demoteToCanvasEvents() {
+        // Remove document events
+        document.removeEventListener('mousemove', this.boundMouseMove);
+        document.removeEventListener('mouseup', this.boundMouseUp);
+        
+        // Restore canvas events
+        this.canvas.addEventListener('mousemove', this.boundMouseMove);
+        
+        // Restore normal cursor and text selection
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+        this.canvas.style.cursor = 'default';
     }
     
     // Convert screen pixel coordinates to UV coordinates (0-1)
@@ -70,6 +105,7 @@ class SimpleInteractiveEditor {
                         uvHeight: this.layerManager.selectedLayer.uvHeight
                     };
                     this.canvas.style.cursor = handle.cursor;
+                    this.promoteToGlobalEvents(); // Enable mouse tracking outside canvas
                     return;
                 }
             }
@@ -87,8 +123,10 @@ class SimpleInteractiveEditor {
                 layerV: hitLayer.uvY
             };
             this.canvas.style.cursor = 'move';
+            this.promoteToGlobalEvents(); // Enable mouse tracking outside canvas
         } else {
-            this.layerManager.selectLayer(null);
+            // Clear selection and render clean when clicking empty space
+            this.layerManager.clearSelectionAndRenderClean();
         }
         
         event.preventDefault();
@@ -109,14 +147,19 @@ class SimpleInteractiveEditor {
             this.layerManager.selectedLayer.uvX = this.dragStartPos.layerU + deltaU;
             this.layerManager.selectedLayer.uvY = this.dragStartPos.layerV + deltaV;
             
-            // Constrain to canvas bounds
-            const halfWidth = this.layerManager.selectedLayer.uvWidth / 2;
-            const halfHeight = this.layerManager.selectedLayer.uvHeight / 2;
+            // Constrain to prevent complete disappearance - allow 80% overhang
+            const layer = this.layerManager.selectedLayer;
+            const overflowMargin = 0.2; // Allow 80% of image to go off-screen
             
-            this.layerManager.selectedLayer.uvX = Math.max(halfWidth, Math.min(1 - halfWidth, this.layerManager.selectedLayer.uvX));
-            this.layerManager.selectedLayer.uvY = Math.max(halfHeight, Math.min(1 - halfHeight, this.layerManager.selectedLayer.uvY));
+            const minX = -layer.uvWidth * (1 - overflowMargin);
+            const maxX = 1 + layer.uvWidth * (1 - overflowMargin);
+            const minY = -layer.uvHeight * (1 - overflowMargin);
+            const maxY = 1 + layer.uvHeight * (1 - overflowMargin);
             
-            this.layerManager.renderLayers();
+            layer.uvX = Math.max(minX, Math.min(maxX, layer.uvX));
+            layer.uvY = Math.max(minY, Math.min(maxY, layer.uvY));
+            
+            this.layerManager.renderWithSelection(); // Show selection during drag
             this.layerManager.updateLayerList();
             return;
         }
@@ -133,6 +176,9 @@ class SimpleInteractiveEditor {
         this.dragStartPos = null;
         this.canvas.style.cursor = 'default';
         
+        // Return to canvas-only event handling
+        this.demoteToCanvasEvents();
+        
         // Update Three.js texture
         if (window.uvTextureEditor) {
             window.uvTextureEditor.updateTexture();
@@ -148,57 +194,57 @@ class SimpleInteractiveEditor {
         // Calculate new bounds based on handle
         let newBounds = { ...startBounds };
         
+        // Get the center point for consistent scaling
+        const centerX = startBounds.uvX;
+        const centerY = startBounds.uvY;
+        
         switch (this.resizeHandle) {
             case 'se': // Southeast (bottom-right)
-                newBounds.uvWidth = Math.max(0.05, (coords.u - startBounds.uvX + startBounds.uvWidth/2) * 2);
-                newBounds.uvHeight = Math.max(0.05, (coords.v - startBounds.uvY + startBounds.uvHeight/2) * 2);
+                newBounds.uvWidth = Math.abs((coords.u - centerX) * 2);
+                newBounds.uvHeight = Math.abs((coords.v - centerY) * 2);
                 break;
             case 'nw': // Northwest (top-left)
-                newBounds.uvWidth = Math.max(0.05, (startBounds.uvX + startBounds.uvWidth/2 - coords.u) * 2);
-                newBounds.uvHeight = Math.max(0.05, (startBounds.uvY + startBounds.uvHeight/2 - coords.v) * 2);
-                newBounds.uvX = startBounds.uvX + startBounds.uvWidth/2 - newBounds.uvWidth/2;
-                newBounds.uvY = startBounds.uvY + startBounds.uvHeight/2 - newBounds.uvHeight/2;
+                newBounds.uvWidth = Math.abs((centerX - coords.u) * 2);
+                newBounds.uvHeight = Math.abs((centerY - coords.v) * 2);
                 break;
             case 'ne': // Northeast (top-right)
-                newBounds.uvWidth = Math.max(0.05, (coords.u - startBounds.uvX + startBounds.uvWidth/2) * 2);
-                newBounds.uvHeight = Math.max(0.05, (startBounds.uvY + startBounds.uvHeight/2 - coords.v) * 2);
-                newBounds.uvY = startBounds.uvY + startBounds.uvHeight/2 - newBounds.uvHeight/2;
+                newBounds.uvWidth = Math.abs((coords.u - centerX) * 2);
+                newBounds.uvHeight = Math.abs((centerY - coords.v) * 2);
                 break;
             case 'sw': // Southwest (bottom-left)
-                newBounds.uvWidth = Math.max(0.05, (startBounds.uvX + startBounds.uvWidth/2 - coords.u) * 2);
-                newBounds.uvHeight = Math.max(0.05, (coords.v - startBounds.uvY + startBounds.uvHeight/2) * 2);
-                newBounds.uvX = startBounds.uvX + startBounds.uvWidth/2 - newBounds.uvWidth/2;
+                newBounds.uvWidth = Math.abs((centerX - coords.u) * 2);
+                newBounds.uvHeight = Math.abs((coords.v - centerY) * 2);
                 break;
-            // Edge handles
+            // Edge handles - maintain aspect ratio center
             case 'n':
-                newBounds.uvHeight = Math.max(0.05, (startBounds.uvY + startBounds.uvHeight/2 - coords.v) * 2);
-                newBounds.uvY = startBounds.uvY + startBounds.uvHeight/2 - newBounds.uvHeight/2;
+                newBounds.uvHeight = Math.abs((centerY - coords.v) * 2);
                 break;
             case 's':
-                newBounds.uvHeight = Math.max(0.05, (coords.v - startBounds.uvY + startBounds.uvHeight/2) * 2);
+                newBounds.uvHeight = Math.abs((coords.v - centerY) * 2);
                 break;
             case 'w':
-                newBounds.uvWidth = Math.max(0.05, (startBounds.uvX + startBounds.uvWidth/2 - coords.u) * 2);
-                newBounds.uvX = startBounds.uvX + startBounds.uvWidth/2 - newBounds.uvWidth/2;
+                newBounds.uvWidth = Math.abs((centerX - coords.u) * 2);
                 break;
             case 'e':
-                newBounds.uvWidth = Math.max(0.05, (coords.u - startBounds.uvX + startBounds.uvWidth/2) * 2);
+                newBounds.uvWidth = Math.abs((coords.u - centerX) * 2);
                 break;
         }
         
-        // Apply bounds and constraints
-        newBounds.uvWidth = Math.min(1.0, newBounds.uvWidth);
-        newBounds.uvHeight = Math.min(1.0, newBounds.uvHeight);
+        // Apply smooth constraints with softer minimums and progressive scaling
+        const minSize = 0.02; // Smaller minimum for more precise control
+        const maxSize = 0.95;  // Slightly smaller max to prevent edge issues
         
-        // Constrain position to keep layer in bounds
-        const halfWidth = newBounds.uvWidth / 2;
-        const halfHeight = newBounds.uvHeight / 2;
-        newBounds.uvX = Math.max(halfWidth, Math.min(1 - halfWidth, newBounds.uvX));
-        newBounds.uvY = Math.max(halfHeight, Math.min(1 - halfHeight, newBounds.uvY));
+        // Smooth size constraints with generous maximums to allow large scaling
+        newBounds.uvWidth = Math.max(minSize, Math.min(3.0, newBounds.uvWidth));  // Allow up to 3x canvas size
+        newBounds.uvHeight = Math.max(minSize, Math.min(3.0, newBounds.uvHeight));
+        
+        // During resize, don't constrain position - allow images to extend beyond canvas
+        // This enables continuous scaling even when touching edges
+        // Position constraints are only applied during dragging, not resizing
         
         // Update layer
         Object.assign(layer, newBounds);
-        this.layerManager.renderLayers();
+        this.layerManager.renderWithSelection(); // Show selection during resize
         this.layerManager.updateLayerList();
     }
     

@@ -233,6 +233,11 @@ function initializeApplication() {
         setupModelControlListeners();
     }
     
+    // 9b. Setup double-click camera centering
+    if (typeof window.setupModelDoubleClickHandler === 'function') {
+        window.setupModelDoubleClickHandler();
+    }
+    
     // Setup UI system if function exists
     if (typeof setupUISystem === 'function') {
         setupUISystem();
@@ -289,6 +294,13 @@ function setupImageToolEventHandlers() {
             if (window.layerManager.selectedLayer) {
                 window.layerManager.removeLayer(window.layerManager.selectedLayer.id);
             }
+        });
+    }
+    
+    const clearSelection = document.getElementById('clear-selection');
+    if (clearSelection) {
+        clearSelection.addEventListener('click', () => {
+            window.layerManager.clearSelectionAndRenderClean();
         });
     }
     
