@@ -95,49 +95,31 @@ function fallbackToLowerQuality(newQuality) {
     // Update global quality setting
     window.currentQuality = newQuality;
     
-    const previousImageData = window.textureCtx.getImageData(0, 0, window.currentQuality, window.currentQuality);
-    initializeCanvas(newQuality);
-    
-    // Scale and preserve content
-    if (previousImageData) {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = previousImageData.width;
-        tempCanvas.height = previousImageData.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.putImageData(previousImageData, 0, 0);
+    // Update canvas size and re-render layers
+    const displayCanvas = document.getElementById('display-canvas');
+    if (displayCanvas) {
+        displayCanvas.width = newQuality;
+        displayCanvas.height = newQuality;
         
-        window.textureCtx.drawImage(tempCanvas, 0, 0, window.currentQuality, window.currentQuality);
+        // Re-render layers at new quality
+        if (window.layerManager) {
+            window.layerManager.renderLayers();
+        }
     }
     
-    createCanvasTexture();
-    
-    // Update all materials
-    if (window.imageMaterials) {
+    // Update all materials with new texture
+    updateMaterialTextures();
+}
+
+// Apply canvas texture to materials
+function updateMaterialTextures() {
+    if (window.uvTextureEditor && window.imageMaterials) {
+        const texture = window.uvTextureEditor.getTexture();
         window.imageMaterials.forEach(material => {
-            material.map = window.canvasTexture;
+            material.map = texture;
             material.needsUpdate = true;
         });
     }
-}
-
-// UV-based texture creation - no longer needed as UVTextureEditor handles this
-function createCanvasTexture() {
-    // The UV texture editor now handles texture creation
-    if (window.uvTextureEditor) {
-        window.canvasTexture = window.uvTextureEditor.getTexture();
-        
-        // Apply to existing materials
-        if (window.imageMaterials) {
-            window.imageMaterials.forEach(material => {
-                material.map = window.canvasTexture;
-                material.needsUpdate = true;
-            });
-        }
-        
-        return window.canvasTexture;
-    }
-    
-    return null;
 }
 
 // Animation loop with performance monitoring
@@ -150,7 +132,7 @@ function animateWithMonitoring() {
     updatePerformanceMonitor();
 }
 
-// Drag and drop GLB loading
+// Drag and drop for GLB files and images
 function setupDragAndDrop() {
     const dropZone = document.getElementById('drop-zone');
     if (!dropZone) return;
@@ -164,19 +146,35 @@ function setupDragAndDrop() {
     
     document.addEventListener('drop', (e) => {
         dropZone.classList.remove('dragging');
-        const file = e.dataTransfer.files[0];
-        if (file && file.name.toLowerCase().endsWith('.glb')) {
+        const files = Array.from(e.dataTransfer.files);
+        
+        // Handle GLB files
+        const glbFile = files.find(f => f.name.toLowerCase().endsWith('.glb'));
+        if (glbFile) {
             dropZone.classList.add('hidden');
             if (window.loadGLBFile && window.scene) {
-                window.loadGLBFile(file, window.scene);
+                window.loadGLBFile(glbFile, window.scene);
             }
         }
+        
+        // Handle image files
+        const imageFiles = files.filter(f => f.type.startsWith('image/'));
+        imageFiles.forEach(file => {
+            const img = new Image();
+            img.onload = () => {
+                if (window.layerManager) {
+                    window.layerManager.addImage(img);
+                }
+                URL.revokeObjectURL(img.src);
+            };
+            img.src = URL.createObjectURL(file);
+        });
     });
 }
 
-// Main initialization function
+// Image-focused application initialization
 function initializeApplication() {
-    console.log('Initializing 3D Texture Editor...');
+    console.log('Initializing Image Texture Editor...');
     
     // 1. Initialize Three.js scene
     const scene = setupScene();
@@ -187,63 +185,76 @@ function initializeApplication() {
     window.scene = scene;
     window.camera = camera;
     window.renderer = renderer;
-    window.controls = controls; // Available from scene-manager
+    window.controls = window.getControls(); // Get controls from scene-manager
     
-    // 2. Setup UV-based canvas and drawing system
-    const { displayCanvas, uvTextureEditor, displayCtx } = setupCanvases();
-    
-    // 3. Initialize simple layer management (no scaling complexity)
+    // 2. Initialize image layer management system
     const layerManager = new SimpleLayerManager();
     window.layerManager = layerManager;
     
-    // 3.5. Initialize simple interactive editor 
-    const interactiveEditor = new SimpleInteractiveEditor(
-        displayCanvas,
-        layerManager
-    );
-    layerManager.interactiveEditor = interactiveEditor;
+    // 3. Get the display canvas (now 1024x1024)
+    const displayCanvas = document.getElementById('display-canvas');
+    if (!displayCanvas) {
+        console.error('Display canvas not found');
+        return;
+    }
+    
+    // 4. Initialize interactive editor for drag/resize operations
+    const interactiveEditor = new SimpleInteractiveEditor(displayCanvas, layerManager);
     window.interactiveEditor = interactiveEditor;
     
-    // 4. Detect device capabilities using Three.js built-ins
-    const capabilities = detectDeviceCapabilities(renderer);
-    console.log('Three.js Device capabilities:', capabilities);
+    // 5. Initialize UV texture editor for Three.js integration
+    const uvTextureEditor = new UVTextureEditor();
+    window.uvTextureEditor = uvTextureEditor;
     
-    // Apply Three.js optimizations based on capabilities
+    // 6. Detect device capabilities
+    const capabilities = detectDeviceCapabilities(renderer);
+    console.log('Device capabilities:', capabilities);
+    
+    // Apply optimizations based on capabilities
     renderer.setPixelRatio(capabilities.pixelRatio);
     
     // Target 1024x1024 but fallback if needed
     const targetQuality = capabilities.canHandle1024 ? 1024 : capabilities.optimalQuality;
-    console.log(`Initializing with ${targetQuality}x${targetQuality} canvas texture`);
-    
-    // 5. Initialize canvas with simple quality system
     window.currentQuality = targetQuality;
-    initializeCanvas(targetQuality);
-    createCanvasTexture();
     
-    // 6. Set initial drawing mode
-    setDrawingMode(MODES.SELECT);
+    // Update canvas size if needed
+    if (displayCanvas.width !== targetQuality) {
+        displayCanvas.width = targetQuality;
+        displayCanvas.height = targetQuality;
+    }
     
-    // 7. Setup all UI systems
-    setupModelControlListeners();
-    setupModeEventHandlers();
-    setupUISystem();
-    initializeControls();
+    console.log(`Initialized with ${targetQuality}x${targetQuality} texture quality`);
     
-    // 7.5. Initialize lighting dev console
-    initializeLightingConsole();
+    // 7. Setup UI event handlers
+    setupImageToolEventHandlers();
     
-    // 8. Setup drag and drop
+    // Setup model control listeners if function exists
+    if (typeof setupModelControlListeners === 'function') {
+        setupModelControlListeners();
+    }
+    
+    // Setup UI system if function exists
+    if (typeof setupUISystem === 'function') {
+        setupUISystem();
+    }
+    
+    // 8. Setup drag and drop for both GLB and images
     setupDragAndDrop();
     
     // 9. Start animation loop
     animateWithMonitoring();
     
-    // 10. Load default GLB model
-    if (window.loadDefaultGLB) {
+    // 10. Initialize lighting console if available
+    if (typeof initializeLightingConsole === 'function') {
+        initializeLightingConsole();
+    }
+    
+    // 11. Load default GLB model
+    if (typeof window.loadDefaultGLB === 'function') {
         window.loadDefaultGLB('91x91_4.glb', scene);
     }
     
-    // 11. Setup memory monitoring
+    // 12. Setup memory monitoring
     if (performance.memory) {
         setInterval(() => {
             const memUsed = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
@@ -254,7 +265,163 @@ function initializeApplication() {
         }, 10000);
     }
     
-    console.log('Application initialized successfully!');
+    console.log('Image Texture Editor initialized successfully!');
+}
+
+// Setup image tool event handlers
+function setupImageToolEventHandlers() {
+    // GLB file upload
+    const glbFileInput = document.getElementById('glb-file-input');
+    if (glbFileInput) {
+        glbFileInput.addEventListener('change', handleGLBUpload);
+    }
+    
+    // Image upload
+    const imageUpload = document.getElementById('image-upload');
+    if (imageUpload) {
+        imageUpload.addEventListener('change', handleImageUpload);
+    }
+    
+    // Layer controls
+    const deleteSelected = document.getElementById('delete-selected');
+    if (deleteSelected) {
+        deleteSelected.addEventListener('click', () => {
+            if (window.layerManager.selectedLayer) {
+                window.layerManager.removeLayer(window.layerManager.selectedLayer.id);
+            }
+        });
+    }
+    
+    const clearAll = document.getElementById('clear-all');
+    if (clearAll) {
+        clearAll.addEventListener('click', () => {
+            if (confirm('Clear all images?')) {
+                window.layerManager.clearLayers();
+            }
+        });
+    }
+    
+    const bringForward = document.getElementById('bring-forward');
+    if (bringForward) {
+        bringForward.addEventListener('click', () => {
+            if (window.layerManager.selectedLayer) {
+                window.layerManager.moveLayerUp(window.layerManager.selectedLayer.id);
+            }
+        });
+    }
+    
+    const sendBackward = document.getElementById('send-backward');
+    if (sendBackward) {
+        sendBackward.addEventListener('click', () => {
+            if (window.layerManager.selectedLayer) {
+                window.layerManager.moveLayerDown(window.layerManager.selectedLayer.id);
+            }
+        });
+    }
+    
+    // Quality selector
+    const qualitySelector = document.getElementById('quality-selector');
+    if (qualitySelector) {
+        qualitySelector.addEventListener('change', (e) => {
+            const newQuality = parseInt(e.target.value);
+            setTextureQuality(newQuality);
+        });
+    }
+}
+
+// Handle GLB file upload
+function handleGLBUpload(event) {
+    const file = event.target.files[0];
+    if (file && file.name.toLowerCase().endsWith('.glb')) {
+        // Hide drop zone
+        const dropZone = document.getElementById('drop-zone');
+        if (dropZone) {
+            dropZone.classList.add('hidden');
+        }
+        
+        // Load the GLB file
+        if (window.loadGLBFile && window.scene) {
+            window.loadGLBFile(file, window.scene);
+        }
+    }
+    
+    // Reset file input
+    event.target.value = '';
+}
+
+// Handle multiple image uploads
+function handleImageUpload(event) {
+    const files = Array.from(event.target.files);
+    
+    files.forEach(file => {
+        if (file.type.startsWith('image/')) {
+            const img = new Image();
+            img.onload = () => {
+                window.layerManager.addImage(img);
+                URL.revokeObjectURL(img.src); // Clean up memory
+            };
+            img.src = URL.createObjectURL(file);
+        }
+    });
+    
+    // Reset file input
+    event.target.value = '';
+}
+
+// Set texture quality
+function setTextureQuality(quality) {
+    if (quality === window.currentQuality) return;
+    
+    console.log(`Changing quality from ${window.currentQuality}x${window.currentQuality} to ${quality}x${quality}`);
+    
+    const displayCanvas = document.getElementById('display-canvas');
+    if (displayCanvas) {
+        displayCanvas.width = quality;
+        displayCanvas.height = quality;
+        
+        window.currentQuality = quality;
+        
+        // Re-render layers at new quality
+        if (window.layerManager) {
+            window.layerManager.renderLayers();
+        }
+        
+        // Update Three.js texture
+        if (window.uvTextureEditor) {
+            window.uvTextureEditor.updateTexture();
+        }
+    }
+}
+
+// Simple UV Texture Editor for Three.js integration
+class UVTextureEditor {
+    constructor() {
+        this.canvas = document.getElementById('display-canvas');
+        if (!this.canvas) {
+            console.error('Display canvas not found');
+            return;
+        }
+        
+        this.texture = new THREE.CanvasTexture(this.canvas);
+        this.texture.flipY = false; // Important for GLB compatibility
+        this.texture.wrapS = THREE.ClampToEdgeWrapping;
+        this.texture.wrapT = THREE.ClampToEdgeWrapping;
+        this.texture.minFilter = THREE.LinearFilter;
+        this.texture.magFilter = THREE.LinearFilter;
+        
+        // Store reference globally
+        window.canvasTexture = this.texture;
+    }
+    
+    updateTexture() {
+        if (this.texture) {
+            this.texture.needsUpdate = true;
+        }
+    }
+    
+    getTexture() {
+        return this.texture;
+    }
 }
 
 // Initialize when DOM is ready

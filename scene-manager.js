@@ -216,3 +216,6 @@ window.setupCamera = setupCamera;
 window.setupRenderer = setupRenderer;
 window.animate = animate;
 window.updateLighting = updateLighting;
+
+// Export controls after they're created
+window.getControls = () => controls;

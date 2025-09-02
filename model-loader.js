@@ -67,6 +67,12 @@ function placeModelOnFloor(model, scene) {
                         // Apply canvasTexture if available globally
                         if (window.canvasTexture) {
                             material.map = window.canvasTexture;
+                        } else if (window.uvTextureEditor) {
+                            // Get texture from UV editor if canvas texture isn't set yet
+                            const texture = window.uvTextureEditor.getTexture();
+                            if (texture) {
+                                material.map = texture;
+                            }
                         }
                         
                         // Three.js material optimization for texture editing

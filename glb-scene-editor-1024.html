@@ -47,17 +47,106 @@
         
         /* Canvas Container */
         .canvas-container { padding: 12px; display: flex; flex-direction: column; align-items: center; }
-        #display-canvas { border: 1px solid #555; border-radius: 4px; max-width: 100%; height: auto; background: white; cursor: crosshair; }
+        #display-canvas { 
+            border: 2px solid #555; 
+            border-radius: 4px; 
+            max-width: 100%; 
+            height: auto; 
+            background: white; 
+            cursor: default; 
+        }
         
-        /* Mode Selector */
-        .mode-selector { display: flex; gap: 6px; margin: 12px 0; }
-        .mode-btn { padding: 6px 12px; font-size: 11px; border-radius: 3px; background: #333; color: #ccc; border: 1px solid #555; cursor: pointer; }
-        .mode-btn.active { background: #0084ff; color: white; border-color: #0084ff; }
-        .mode-btn:hover:not(.active) { background: #444; }
+        #display-canvas:hover { border-color: #777; }
+        #display-canvas.dragging { cursor: move; }
+        #display-canvas.resizing { cursor: nw-resize; }
         
-        /* Tool Sections */
-        #draw-tools { display: none; }
-        #image-tools { margin-top: 12px; }
+        /* Image Tools - Simplified */
+        .image-tools { margin-top: 12px; }
+        .tool-section { 
+            margin-bottom: 16px; 
+            padding: 12px; 
+            background: rgba(40, 40, 40, 0.6); 
+            border-radius: 4px; 
+        }
+        
+        .tool-section h4 { 
+            margin: 0 0 12px 0; 
+            font-size: 12px; 
+            color: #ccc; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+        }
+        
+        /* File Input Styling */
+        .file-input-wrapper { 
+            position: relative; 
+            display: inline-block; 
+            width: 100%; 
+        }
+        
+        .file-input-wrapper input[type=file] { 
+            position: absolute; 
+            opacity: 0; 
+            width: 100%; 
+            height: 100%; 
+            cursor: pointer; 
+        }
+        
+        .file-input-display { 
+            display: block; 
+            padding: 8px 12px; 
+            background: #333; 
+            color: #fff; 
+            border: 1px solid #555; 
+            border-radius: 3px; 
+            text-align: center; 
+            cursor: pointer; 
+        }
+        
+        .file-input-display:hover { background: #444; }
+        
+        /* Layer Management */
+        .layer-list { 
+            max-height: 200px; 
+            overflow-y: auto; 
+            border: 1px solid #555; 
+            border-radius: 3px; 
+            background: #222; 
+        }
+        
+        .layer-item { 
+            padding: 8px 12px; 
+            border-bottom: 1px solid #333; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            cursor: pointer; 
+        }
+        
+        .layer-item:last-child { border-bottom: none; }
+        .layer-item:hover { background: #333; }
+        .layer-item.selected { background: #0084ff; color: white; }
+        
+        .layer-info { 
+            flex: 1; 
+            font-size: 11px; 
+        }
+        
+        .layer-controls { 
+            display: flex; 
+            gap: 4px; 
+        }
+        
+        .layer-controls button { 
+            padding: 4px 6px; 
+            font-size: 10px; 
+            min-width: auto; 
+        }
+        
+        button.primary { background: #0084ff; border-color: #0084ff; }
+        button.primary:hover { background: #0066cc; }
+        button.danger { background: #cc3333; border-color: #cc3333; }
+        button.danger:hover { background: #aa2222; }
         
         /* Color Modal */
         #colorModal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center; }
@@ -123,6 +212,15 @@
                         </label>
                     </div>
                     <button id="clear-model-btn" style="display: none;">Clear Model</button>
+                </div>
+                
+                <!-- GLB Model Loading -->
+                <div class="control-group">
+                    <label>Load GLB Model</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="glb-file-input" accept=".glb,.gltf" />
+                        <span class="file-input-display">Choose GLB File</span>
+                    </div>
                 </div>
                 
                 <!-- Scene Controls -->
@@ -192,91 +290,58 @@
                 <span class="panel-toggle">▼</span>
             </div>
             <div class="panel-content">
-                <!-- Canvas Container - UV-based single canvas system -->
+                <!-- Single Canvas Container - Direct Texture Editing -->
                 <div class="canvas-container">
-                    <canvas id="display-canvas" width="512" height="512"></canvas>
-                    <!-- texture-canvas removed - now handled by UVTextureEditor -->
-                </div>
-                
-                <!-- Mode Selector -->
-                <div class="mode-selector">
-                    <button id="draw-mode-btn" class="mode-btn">Draw</button>
-                    <button id="select-mode-btn" class="mode-btn active">Select</button>
-                </div>
-                
-                <!-- Draw Tools -->
-                <div id="draw-tools">
-                    <div class="control-group">
-                        <label>Brush Color</label>
-                        <input type="color" id="brush-color" value="#ff0000">
-                    </div>
+                    <canvas id="display-canvas" width="1024" height="1024"></canvas>
                 </div>
                 
                 <!-- Image Tools -->
-                <div id="image-tools">
-                    <div class="control-group">
-                        <label>Upload Image</label>
-                        <input type="file" id="image-upload" accept="image/*">
+                <div class="image-tools">
+                    <div class="tool-section">
+                        <h4>Add Images</h4>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="image-upload" accept="image/*" multiple />
+                            <span class="file-input-display">Upload Images (JPG/PNG)</span>
+                        </div>
                     </div>
                     
-                    <div class="control-group">
-                        <button onclick="showColorSquareDialog()">Add Color Square</button>
-                        <div id="quickSwatches" style="display: flex; gap: 4px; margin-top: 8px;"></div>
+                    <div class="tool-section">
+                        <h4>Layer Management</h4>
+                        <div class="layer-list" id="layer-list">
+                            <div style="padding: 12px; text-align: center; color: #666; font-size: 11px;">
+                                No images added yet
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px; display: flex; gap: 8px;">
+                            <button id="delete-selected">Delete Selected</button>
+                            <button id="clear-all" class="danger">Clear All</button>
+                        </div>
                     </div>
                     
-                    <div class="control-group">
-                        <button id="clear-canvas-btn">Clear Canvas</button>
-                        <button id="hide-canvas-btn">Hide Panel</button>
+                    <div class="tool-section">
+                        <h4>Layer Order</h4>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="bring-forward">Bring Forward</button>
+                            <button id="send-backward">Send Backward</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tool-section">
+                        <h4>Quality Settings</h4>
+                        <div class="control-group">
+                            <label>Texture Quality</label>
+                            <select id="quality-selector">
+                                <option value="1024" selected>High (1024x1024)</option>
+                                <option value="512">Medium (512x512)</option>
+                                <option value="256">Low (256x256)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Color Modal -->
-    <div id="colorModal">
-        <div class="modal-content">
-            <h3>Create Color Square</h3>
-            <div class="control-group">
-                <label>Color</label>
-                <input type="color" id="modalColorPicker" value="#ff0000">
-            </div>
-            <div class="control-group">
-                <label>Hex</label>
-                <input type="text" id="hexInput" value="#ff0000">
-            </div>
-            <div style="display: flex; gap: 12px;">
-                <div class="control-group" style="flex: 1;">
-                    <label>Red</label>
-                    <input type="number" id="redInput" min="0" max="255" value="255">
-                </div>
-                <div class="control-group" style="flex: 1;">
-                    <label>Green</label>
-                    <input type="number" id="greenInput" min="0" max="255" value="0">
-                </div>
-                <div class="control-group" style="flex: 1;">
-                    <label>Blue</label>
-                    <input type="number" id="blueInput" min="0" max="255" value="0">
-                </div>
-            </div>
-            <div class="control-group">
-                <label>Opacity</label>
-                <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="1">
-                <span id="opacityValue">100%</span>
-            </div>
-            <div class="color-preview" id="colorPreview"></div>
-            
-            <div class="control-group">
-                <label>Recent Colors</label>
-                <div class="recent-colors" id="recentColors"></div>
-            </div>
-            
-            <div style="display: flex; gap: 12px; margin-top: 20px;">
-                <button onclick="insertColorSquare()" style="flex: 1;">Add Square</button>
-                <button onclick="closeColorModal()" style="flex: 1;">Cancel</button>
-            </div>
-        </div>
-    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
