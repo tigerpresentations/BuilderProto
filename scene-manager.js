@@ -25,14 +25,17 @@ window.lightingConfig = {
         mapSize: 2048,
         cameraSize: 5,
         bias: -0.0005,
-        normalBias: 0.02
+        normalBias: 0.02,
+        radius: 1,
+        blurScale: 1,
+        penumbra: 0
     },
     toneMappingExposure: 1.0
 };
 
 function setupScene() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xcccccc);
+    scene.background = new THREE.Color(0xdddddd); // Light grey default
     return scene;
 }
 
@@ -75,21 +78,20 @@ function setupRenderer() {
     // Setup improved lighting system
     setupLighting();
     
-    // Floor plane with Three.js material optimizations
-    const floorGeometry = new THREE.PlaneGeometry(20, 20);
+    // Floor cube with Three.js material optimizations
+    const floorGeometry = new THREE.BoxGeometry(3, 0.05, 3);
     const floorMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x808080, 
+        color: 0x333333, // Dark grey default
         roughness: 0.8,
         metalness: 0.1,
         // Performance optimizations
-        side: THREE.FrontSide,
         transparent: false,
         alphaTest: 0
     });
     floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -0.01;
+    floor.position.y = -0.025; // Half the height to sit on ground
     floor.receiveShadow = true;
+    floor.castShadow = true;
     scene.add(floor);
     
     // Handle resize
@@ -135,6 +137,10 @@ function setupLighting() {
     mainLight.shadow.bias = config.shadows.bias;
     mainLight.shadow.normalBias = config.shadows.normalBias;
     
+    // Shadow blur settings for soft shadows
+    mainLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
+    mainLight.penumbra = config.shadows.penumbra;
+    
     // Update shadow camera projection matrix - this fixes the dark box issue
     mainLight.shadow.camera.updateProjectionMatrix();
     
@@ -144,6 +150,12 @@ function setupLighting() {
     fillLight = new THREE.DirectionalLight(config.fillLight.color, config.fillLight.intensity);
     fillLight.position.set(config.fillLight.position.x, config.fillLight.position.y, config.fillLight.position.z);
     fillLight.castShadow = config.fillLight.castShadow;
+    
+    // Apply blur settings to fill light if it casts shadows
+    if (config.fillLight.castShadow) {
+        fillLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
+        fillLight.penumbra = config.shadows.penumbra;
+    }
     scene.add(fillLight);
     
     // Update tone mapping exposure
@@ -192,10 +204,21 @@ function updateLighting() {
     mainLight.shadow.bias = config.shadows.bias;
     mainLight.shadow.normalBias = config.shadows.normalBias;
     
+    // Update shadow blur settings
+    mainLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
+    mainLight.penumbra = config.shadows.penumbra;
+    
     // Update fill light
     fillLight.color.setHex(config.fillLight.color);
     fillLight.intensity = config.fillLight.intensity;
     fillLight.position.set(config.fillLight.position.x, config.fillLight.position.y, config.fillLight.position.z);
+    fillLight.castShadow = config.fillLight.castShadow;
+    
+    // Update fill light blur settings if it casts shadows
+    if (config.fillLight.castShadow && fillLight.shadow) {
+        fillLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
+        fillLight.penumbra = config.shadows.penumbra;
+    }
     
     // Update tone mapping exposure
     renderer.toneMappingExposure = config.toneMappingExposure;

@@ -249,17 +249,27 @@ function initializeApplication() {
     // 9. Start animation loop
     animateWithMonitoring();
     
-    // 10. Initialize lighting console if available
+    // 10. Initialize UI controls
+    if (typeof initializeControls === 'function') {
+        initializeControls();
+    }
+    
+    // 11. Initialize lighting console if available
     if (typeof initializeLightingConsole === 'function') {
         initializeLightingConsole();
     }
     
-    // 11. Load default GLB model
+    // 12. Initialize shadow console if available
+    if (typeof initializeShadowConsole === 'function') {
+        initializeShadowConsole();
+    }
+    
+    // 13. Load default GLB model
     if (typeof window.loadDefaultGLB === 'function') {
         window.loadDefaultGLB('91x91_4.glb', scene);
     }
     
-    // 12. Setup memory monitoring
+    // 14. Setup memory monitoring
     if (performance.memory) {
         setInterval(() => {
             const memUsed = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);

@@ -187,29 +187,9 @@
                 <!-- Model Controls -->
                 <div id="model-controls" style="display: none;">
                     <div class="control-group">
-                        <label>Position X</label>
-                        <input type="range" id="pos-x" min="-10" max="10" step="0.1" value="0">
-                        <span class="slider-value" id="pos-x-val">0.0</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Position Z</label>
-                        <input type="range" id="pos-z" min="-10" max="10" step="0.1" value="0">
-                        <span class="slider-value" id="pos-z-val">0.0</span>
-                    </div>
-                    <div class="control-group">
-                        <label>Scale</label>
-                        <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1">
-                        <span class="slider-value" id="scale-val">1.0</span>
-                    </div>
-                    <div class="control-group">
                         <label>Rotation Y</label>
                         <input type="range" id="rot-y" min="0" max="360" step="1" value="0">
                         <span class="slider-value" id="rot-y-val">0°</span>
-                    </div>
-                    <div class="control-group">
-                        <label>
-                            <input type="checkbox" id="backlight-toggle"> Backlight Effect
-                        </label>
                     </div>
                     <button id="clear-model-btn" style="display: none;">Clear Model</button>
                 </div>
@@ -223,20 +203,51 @@
                     </div>
                 </div>
                 
-                <!-- Scene Controls -->
-                <div class="control-group">
-                    <label>Background Color</label>
-                    <input type="color" id="bg-color" value="#cccccc">
-                </div>
-                
                 <!-- Canvas Editor Toggle -->
                 <div class="control-group">
                     <button id="toggle-canvas-btn">Toggle Canvas Editor</button>
                 </div>
-                
-                <!-- Developer Tools -->
+            </div>
+        </div>
+        
+        <!-- Scene Controls -->
+        <div class="collapsible-panel">
+            <div class="panel-header" data-panel="scene-controls">
+                <span>Scene Controls</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <div class="control-group">
+                    <label>Brightness</label>
+                    <input type="range" id="material-brightness" min="0" max="3" step="0.01" value="1">
+                    <span class="slider-value" id="brightness-val">1.00</span>
+                </div>
+                <div class="control-group">
+                    <label>Lighting Intensity</label>
+                    <input type="range" id="lighting-intensity" min="0" max="3" step="0.01" value="1">
+                    <span class="slider-value" id="lighting-val">1.00</span>
+                </div>
+                <div class="control-group">
+                    <label>Background Color</label>
+                    <input type="color" id="bg-color" value="#dddddd">
+                </div>
+                <div class="control-group">
+                    <label>Floor Color</label>
+                    <input type="color" id="floor-color" value="#333333">
+                </div>
+                <div class="control-group">
+                    <label>Floor Width</label>
+                    <input type="range" id="floor-width" min="1" max="10" step="0.1" value="3">
+                    <span class="slider-value" id="floor-width-val">3.0</span>
+                </div>
+                <div class="control-group">
+                    <label>Floor Depth</label>
+                    <input type="range" id="floor-depth" min="1" max="10" step="0.1" value="3">
+                    <span class="slider-value" id="floor-depth-val">3.0</span>
+                </div>
                 <div class="control-group">
                     <button id="lighting-dev-btn">Lighting Console</button>
+                    <button id="shadow-dev-btn">Shadow Console</button>
                 </div>
             </div>
         </div>

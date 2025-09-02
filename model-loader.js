@@ -81,10 +81,14 @@ function placeModelOnFloor(model, scene) {
                         material.depthWrite = true;
                         material.side = THREE.FrontSide; // Performance optimization
                         
-                        // Initialize backlight properties
-                        material.emissive = new THREE.Color(0x000000);
-                        material.emissiveIntensity = 0.0;
-                        material.emissiveMap = null;
+                        // Initialize material properties for controls
+                        if (!material.color) {
+                            material.color = new THREE.Color(1, 1, 1); // White base color for brightness control
+                        }
+                        if (!material.emissive) {
+                            material.emissive = new THREE.Color(0x000000); // Black = no emission
+                        }
+                        material.emissiveMap = null; // Will be set when emission is enabled
                         
                         material.needsUpdate = true;
                     }
@@ -114,6 +118,11 @@ function placeModelOnFloor(model, scene) {
     }
     
     updateModelControls(model);
+    
+    // Apply current material control values to the newly loaded model
+    if (window.applyCurrentMaterialSettings) {
+        window.applyCurrentMaterialSettings();
+    }
     
     // Focus camera (original positioning without animation)
     const modelCenter = new THREE.Vector3();
@@ -146,14 +155,8 @@ function updateModelControls(model) {
     if (!model) return;
     
     // Update sliders
-    const posXSlider = document.getElementById('pos-x');
-    const posZSlider = document.getElementById('pos-z');
-    const scaleSlider = document.getElementById('scale');
     const rotYSlider = document.getElementById('rot-y');
     
-    if (posXSlider) posXSlider.value = model.position.x;
-    if (posZSlider) posZSlider.value = model.position.z;
-    if (scaleSlider) scaleSlider.value = model.scale.x;
     if (rotYSlider) rotYSlider.value = (model.rotation.y * 180 / Math.PI) % 360;
     
     updateValueDisplays(model);
@@ -162,43 +165,13 @@ function updateModelControls(model) {
 function updateValueDisplays(model) {
     if (!model) return;
     
-    const posXVal = document.getElementById('pos-x-val');
-    const posZVal = document.getElementById('pos-z-val');
-    const scaleVal = document.getElementById('scale-val');
     const rotYVal = document.getElementById('rot-y-val');
     
-    if (posXVal) posXVal.textContent = model.position.x.toFixed(1);
-    if (posZVal) posZVal.textContent = model.position.z.toFixed(1);
-    if (scaleVal) scaleVal.textContent = model.scale.x.toFixed(1);
     if (rotYVal) rotYVal.textContent = Math.round(model.rotation.y * 180 / Math.PI) + '°';
 }
 
 function setupModelControlListeners() {
-    // Model control sliders
-    ['pos-x', 'pos-z'].forEach((id, index) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.addEventListener('input', (e) => {
-                if (currentModel) {
-                    const coord = index === 0 ? 'x' : 'z';
-                    currentModel.position[coord] = parseFloat(e.target.value);
-                    updateValueDisplays(currentModel);
-                }
-            });
-        }
-    });
-    
-    const scaleSlider = document.getElementById('scale');
-    if (scaleSlider) {
-        scaleSlider.addEventListener('input', (e) => {
-            if (currentModel) {
-                const scale = parseFloat(e.target.value);
-                currentModel.scale.set(scale, scale, scale);
-                updateValueDisplays(currentModel);
-            }
-        });
-    }
-    
+    // Model control sliders - only rotation remains
     const rotYSlider = document.getElementById('rot-y');
     if (rotYSlider) {
         rotYSlider.addEventListener('input', (e) => {
@@ -206,29 +179,6 @@ function setupModelControlListeners() {
                 currentModel.rotation.y = parseFloat(e.target.value) * Math.PI / 180;
                 updateValueDisplays(currentModel);
             }
-        });
-    }
-    
-    // Backlight toggle
-    const backlightToggle = document.getElementById('backlight-toggle');
-    if (backlightToggle) {
-        backlightToggle.addEventListener('change', (e) => {
-            const backlightEnabled = e.target.checked;
-            
-            imageMaterials.forEach(material => {
-                if (backlightEnabled) {
-                    // Enable backlight glow effect
-                    material.emissive = new THREE.Color(0xffffff);
-                    material.emissiveIntensity = 0.3;
-                    material.emissiveMap = window.canvasTexture; // Use same texture for glow
-                } else {
-                    // Disable backlight
-                    material.emissive = new THREE.Color(0x000000);
-                    material.emissiveIntensity = 0.0;
-                    material.emissiveMap = null;
-                }
-                material.needsUpdate = true;
-            });
         });
     }
     

@@ -521,6 +521,115 @@ function initializeControls() {
         });
     }
     
+    // Floor controls
+    const floorColor = document.getElementById('floor-color');
+    if (floorColor && window.floor) {
+        floorColor.addEventListener('input', (e) => {
+            if (window.floor && window.floor.material) {
+                window.floor.material.color.setHex(e.target.value.replace('#', '0x'));
+            }
+        });
+    }
+    
+    const floorWidth = document.getElementById('floor-width');
+    const floorDepth = document.getElementById('floor-depth');
+    
+    const updateFloorGeometry = () => {
+        if (window.floor && window.scene) {
+            const width = parseFloat(floorWidth.value);
+            const height = 0.05; // Fixed height
+            const depth = parseFloat(floorDepth.value);
+            
+            // Update display values
+            document.getElementById('floor-width-val').textContent = width.toFixed(1);
+            document.getElementById('floor-depth-val').textContent = depth.toFixed(1);
+            
+            // Dispose old geometry
+            if (window.floor.geometry) {
+                window.floor.geometry.dispose();
+            }
+            
+            // Create new geometry
+            window.floor.geometry = new THREE.BoxGeometry(width, height, depth);
+            window.floor.position.y = -height / 2;
+        }
+    };
+    
+    if (floorWidth) floorWidth.addEventListener('input', updateFloorGeometry);
+    if (floorDepth) floorDepth.addEventListener('input', updateFloorGeometry);
+    
+    // Material controls
+    const materialBrightness = document.getElementById('material-brightness');
+    const lightingIntensity = document.getElementById('lighting-intensity');
+    
+    const updateMaterialProperties = () => {
+        if (window.currentModel) {
+            const brightness = parseFloat(materialBrightness?.value || 1);
+            
+            // Update display values
+            if (document.getElementById('brightness-val')) {
+                document.getElementById('brightness-val').textContent = brightness.toFixed(2);
+            }
+            
+            // Apply to all materials with "Image" in their name
+            window.currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(mat => {
+                        if (mat.name && mat.name.toLowerCase().includes('image')) {
+                            // Apply brightness by scaling the material color
+                            if (!mat.color) {
+                                mat.color = new THREE.Color(1, 1, 1);
+                            }
+                            mat.color.setScalar(brightness);
+                            mat.needsUpdate = true;
+                        }
+                    });
+                }
+            });
+        }
+    };
+    
+    // Lighting intensity control
+    const updateLightingIntensity = () => {
+        const intensity = parseFloat(lightingIntensity?.value || 1);
+        
+        if (document.getElementById('lighting-val')) {
+            document.getElementById('lighting-val').textContent = intensity.toFixed(2);
+        }
+        
+        // Update all lights in the scene based on the lighting config
+        if (window.lightingConfig && window.updateLighting) {
+            // Store the base intensities if not already stored
+            if (!window.baseLightIntensities) {
+                window.baseLightIntensities = {
+                    hemisphere: window.lightingConfig.hemisphere.intensity,
+                    mainLight: window.lightingConfig.mainLight.intensity,
+                    fillLight: window.lightingConfig.fillLight.intensity
+                };
+            }
+            
+            // Apply the multiplier
+            window.lightingConfig.hemisphere.intensity = window.baseLightIntensities.hemisphere * intensity;
+            window.lightingConfig.mainLight.intensity = window.baseLightIntensities.mainLight * intensity;
+            window.lightingConfig.fillLight.intensity = window.baseLightIntensities.fillLight * intensity;
+            
+            // Update the actual lights
+            window.updateLighting();
+        }
+    };
+    
+    // Unlit mode toggle
+    
+    if (materialBrightness) materialBrightness.addEventListener('input', updateMaterialProperties);
+    if (lightingIntensity) lightingIntensity.addEventListener('input', updateLightingIntensity);
+    
+    // Expose function to apply current settings when a model is loaded
+    window.applyCurrentMaterialSettings = () => {
+        updateMaterialProperties();
+        updateLightingIntensity();
+    };
+    
     // Clear canvas button
     const clearCanvasBtn = document.getElementById('clear-canvas-btn');
     if (clearCanvasBtn) {
@@ -576,6 +685,16 @@ function initializeControls() {
         lightingDevBtn.addEventListener('click', () => {
             if (window.lightingConsole) {
                 window.lightingConsole.toggle();
+            }
+        });
+    }
+    
+    // Shadow dev console button
+    const shadowDevBtn = document.getElementById('shadow-dev-btn');
+    if (shadowDevBtn) {
+        shadowDevBtn.addEventListener('click', () => {
+            if (window.shadowConsole) {
+                window.shadowConsole.toggle();
             }
         });
     }
@@ -881,6 +1000,358 @@ class LightingDevConsole {
     }
 }
 
+// Shadow Dev Console Class
+class ShadowDevConsole {
+    constructor() {
+        this.isVisible = false;
+        this.createPanel();
+        this.initializeControls();
+    }
+    
+    createPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'shadow-dev-console';
+        panel.style.cssText = `
+            position: fixed; top: 20px; right: 20px; width: 320px; z-index: 1002;
+            background: rgba(40, 40, 40, 0.95); border: 1px solid #666;
+            border-radius: 8px; padding: 15px; font-family: monospace;
+            color: #fff; font-size: 12px; display: none;
+            max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        `;
+        
+        panel.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #555; padding-bottom: 10px;">
+                <h3 style="margin: 0; color: #9C27B0;">Shadow Dev Console</h3>
+                <button onclick="window.shadowConsole.hide()" style="background: #666; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer;">×</button>
+            </div>
+            
+            <!-- Shadow Map Settings -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #E91E63;">Shadow Map</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Size: <select id="shadowMapSize" style="width: 80px; margin-left: 5px;">
+                        <option value="512">512</option>
+                        <option value="1024">1024</option>
+                        <option value="2048" selected>2048</option>
+                        <option value="4096">4096</option>
+                    </select></label>
+                    <label>Type: <select id="shadowMapType" style="width: 80px; margin-left: 5px;">
+                        <option value="basic">Basic</option>
+                        <option value="pcf">PCF</option>
+                        <option value="pcfsoft" selected>PCF Soft</option>
+                    </select></label>
+                    <label>Enabled: <input type="checkbox" id="shadowsEnabled" checked style="margin-left: 5px;"></label>
+                    <label>Auto Update: <input type="checkbox" id="shadowAutoUpdate" checked style="margin-left: 5px;"></label>
+                </div>
+            </div>
+            
+            <!-- Shadow Camera -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #673AB7;">Shadow Camera</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Size: <input type="range" id="shadowCameraSize" min="1" max="15" step="0.5" value="5" style="width: 80px;"> <span id="shadowCameraSizeValue">5</span></label>
+                    <label>Near: <input type="range" id="shadowCameraNear" min="0.01" max="1" step="0.01" value="0.1" style="width: 80px;"> <span id="shadowCameraNearValue">0.1</span></label>
+                    <label>Far: <input type="range" id="shadowCameraFar" min="10" max="100" step="5" value="50" style="width: 80px;"> <span id="shadowCameraFarValue">50</span></label>
+                </div>
+            </div>
+            
+            <!-- Shadow Quality -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #3F51B5;">Shadow Quality</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Bias: <input type="range" id="shadowBiasControl" min="-0.01" max="0.01" step="0.0001" value="-0.0005" style="width: 80px;"> <span id="shadowBiasValue">-0.0005</span></label>
+                    <label>Normal Bias: <input type="range" id="shadowNormalBias" min="0" max="0.1" step="0.005" value="0.02" style="width: 80px;"> <span id="shadowNormalBiasValue">0.02</span></label>
+                    <label>Radius: <input type="range" id="shadowRadius" min="1" max="25" step="0.5" value="1" style="width: 80px;"> <span id="shadowRadiusValue">1</span></label>
+                    <label>Blur Scale: <input type="range" id="shadowBlurScale" min="0.1" max="5" step="0.1" value="1" style="width: 80px;"> <span id="shadowBlurScaleValue">1</span></label>
+                    <label>Penumbra: <input type="range" id="shadowPenumbra" min="0" max="1" step="0.05" value="0" style="width: 80px;"> <span id="shadowPenumbraValue">0</span></label>
+                </div>
+            </div>
+            
+            <!-- Light Shadow Settings -->
+            <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: #FF9800;">Light Settings</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <label>Main Casts Shadow: <input type="checkbox" id="mainLightCastShadow" checked style="margin-left: 5px;"></label>
+                    <label>Fill Casts Shadow: <input type="checkbox" id="fillLightCastShadow" style="margin-left: 5px;"></label>
+                </div>
+            </div>
+            
+            <!-- Preset Buttons -->
+            <div style="margin-top: 15px; border-top: 1px solid #555; padding-top: 10px;">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button onclick="window.shadowConsole.loadPreset('sharp')" style="background: #F44336; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Sharp</button>
+                    <button onclick="window.shadowConsole.loadPreset('soft')" style="background: #4CAF50; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Soft</button>
+                    <button onclick="window.shadowConsole.loadPreset('ultrasoft')" style="background: #9C27B0; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Ultra-Soft</button>
+                    <button onclick="window.shadowConsole.loadPreset('performance')" style="background: #FF9800; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Performance</button>
+                    <button onclick="window.shadowConsole.loadPreset('quality')" style="background: #2196F3; border: none; color: white; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">Quality</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(panel);
+        this.panel = panel;
+    }
+    
+    initializeControls() {
+        const controls = [
+            'shadowMapSize', 'shadowMapType', 'shadowsEnabled', 'shadowAutoUpdate',
+            'shadowCameraSize', 'shadowCameraNear', 'shadowCameraFar',
+            'shadowBiasControl', 'shadowNormalBias', 'shadowRadius', 'shadowBlurScale', 'shadowPenumbra',
+            'mainLightCastShadow', 'fillLightCastShadow'
+        ];
+        
+        controls.forEach(id => {
+            const element = this.panel.querySelector(`#${id}`);
+            if (element) {
+                element.addEventListener('input', () => {
+                    this.updateShadowsFromControls();
+                    this.updateValueDisplays();
+                });
+                element.addEventListener('change', () => {
+                    this.updateShadowsFromControls();
+                    this.updateValueDisplays();
+                });
+            }
+        });
+        
+        this.updateValueDisplays();
+    }
+    
+    updateValueDisplays() {
+        const updates = [
+            ['shadowCameraSize', 'shadowCameraSizeValue'],
+            ['shadowCameraNear', 'shadowCameraNearValue'],
+            ['shadowCameraFar', 'shadowCameraFarValue'],
+            ['shadowBiasControl', 'shadowBiasValue'],
+            ['shadowNormalBias', 'shadowNormalBiasValue'],
+            ['shadowRadius', 'shadowRadiusValue'],
+            ['shadowBlurScale', 'shadowBlurScaleValue'],
+            ['shadowPenumbra', 'shadowPenumbraValue']
+        ];
+        
+        updates.forEach(([inputId, displayId]) => {
+            const input = this.panel.querySelector(`#${inputId}`);
+            const display = this.panel.querySelector(`#${displayId}`);
+            if (input && display) {
+                display.textContent = input.value;
+            }
+        });
+    }
+    
+    updateShadowsFromControls() {
+        if (!window.lightingConfig || !window.renderer) return;
+        
+        const config = window.lightingConfig;
+        const renderer = window.renderer;
+        
+        // Update shadow map settings
+        const shadowMapSize = parseInt(this.panel.querySelector('#shadowMapSize').value);
+        const shadowMapType = this.panel.querySelector('#shadowMapType').value;
+        const shadowsEnabled = this.panel.querySelector('#shadowsEnabled').checked;
+        const shadowAutoUpdate = this.panel.querySelector('#shadowAutoUpdate').checked;
+        
+        renderer.shadowMap.enabled = shadowsEnabled;
+        renderer.shadowMap.autoUpdate = shadowAutoUpdate;
+        
+        // Set shadow map type
+        const shadowTypes = {
+            'basic': THREE.BasicShadowMap,
+            'pcf': THREE.PCFShadowMap,
+            'pcfsoft': THREE.PCFSoftShadowMap
+        };
+        if (shadowTypes[shadowMapType]) {
+            renderer.shadowMap.type = shadowTypes[shadowMapType];
+        }
+        
+        // Update shadow config
+        config.shadows.mapSize = shadowMapSize;
+        config.shadows.cameraSize = parseFloat(this.panel.querySelector('#shadowCameraSize').value);
+        config.shadows.bias = parseFloat(this.panel.querySelector('#shadowBiasControl').value);
+        config.shadows.normalBias = parseFloat(this.panel.querySelector('#shadowNormalBias').value);
+        config.shadows.radius = parseFloat(this.panel.querySelector('#shadowRadius').value);
+        config.shadows.blurScale = parseFloat(this.panel.querySelector('#shadowBlurScale').value);
+        config.shadows.penumbra = parseFloat(this.panel.querySelector('#shadowPenumbra').value);
+        
+        // Update light shadow casting
+        config.mainLight.castShadow = this.panel.querySelector('#mainLightCastShadow').checked;
+        config.fillLight.castShadow = this.panel.querySelector('#fillLightCastShadow').checked;
+        
+        // Apply blur settings directly to lights
+        if (window.mainLight && window.mainLight.shadow) {
+            window.mainLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
+            window.mainLight.penumbra = config.shadows.penumbra;
+        }
+        if (window.fillLight && window.fillLight.shadow) {
+            window.fillLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
+            window.fillLight.penumbra = config.shadows.penumbra;
+        }
+        
+        // Apply changes to Three.js scene
+        if (window.updateLighting) {
+            window.updateLighting();
+        }
+        
+        // Force shadow map update
+        renderer.shadowMap.needsUpdate = true;
+    }
+    
+    loadPreset(presetName) {
+        const presets = {
+            sharp: {
+                mapSize: 2048,
+                type: 'basic',
+                enabled: true,
+                autoUpdate: true,
+                cameraSize: 4,
+                cameraNear: 0.1,
+                cameraFar: 40,
+                bias: -0.0001,
+                normalBias: 0.01,
+                radius: 1,
+                blurScale: 0.5,
+                penumbra: 0,
+                mainCastShadow: true,
+                fillCastShadow: false
+            },
+            soft: {
+                mapSize: 2048,
+                type: 'pcfsoft',
+                enabled: true,
+                autoUpdate: true,
+                cameraSize: 8,
+                cameraNear: 0.1,
+                cameraFar: 60,
+                bias: -0.001,
+                normalBias: 0.04,
+                radius: 15,
+                blurScale: 3,
+                penumbra: 0.8,
+                mainCastShadow: true,
+                fillCastShadow: true
+            },
+            performance: {
+                mapSize: 1024,
+                type: 'pcf',
+                enabled: true,
+                autoUpdate: false,
+                cameraSize: 5,
+                cameraNear: 0.2,
+                cameraFar: 30,
+                bias: -0.0005,
+                normalBias: 0.02,
+                radius: 1,
+                blurScale: 1,
+                penumbra: 0,
+                mainCastShadow: true,
+                fillCastShadow: false
+            },
+            quality: {
+                mapSize: 4096,
+                type: 'pcfsoft',
+                enabled: true,
+                autoUpdate: true,
+                cameraSize: 8,
+                cameraNear: 0.05,
+                cameraFar: 80,
+                bias: -0.0002,
+                normalBias: 0.015,
+                radius: 5,
+                blurScale: 2,
+                penumbra: 0.4,
+                mainCastShadow: true,
+                fillCastShadow: true
+            },
+            ultrasoft: {
+                mapSize: 2048,
+                type: 'pcfsoft',
+                enabled: true,
+                autoUpdate: true,
+                cameraSize: 12,
+                cameraNear: 0.1,
+                cameraFar: 70,
+                bias: -0.002,
+                normalBias: 0.05,
+                radius: 25,
+                blurScale: 5,
+                penumbra: 1,
+                mainCastShadow: true,
+                fillCastShadow: true
+            }
+        };
+        
+        const preset = presets[presetName];
+        if (!preset) return;
+        
+        // Update controls
+        this.panel.querySelector('#shadowMapSize').value = preset.mapSize;
+        this.panel.querySelector('#shadowMapType').value = preset.type;
+        this.panel.querySelector('#shadowsEnabled').checked = preset.enabled;
+        this.panel.querySelector('#shadowAutoUpdate').checked = preset.autoUpdate;
+        this.panel.querySelector('#shadowCameraSize').value = preset.cameraSize;
+        this.panel.querySelector('#shadowCameraNear').value = preset.cameraNear;
+        this.panel.querySelector('#shadowCameraFar').value = preset.cameraFar;
+        this.panel.querySelector('#shadowBiasControl').value = preset.bias;
+        this.panel.querySelector('#shadowNormalBias').value = preset.normalBias;
+        this.panel.querySelector('#shadowRadius').value = preset.radius;
+        this.panel.querySelector('#shadowBlurScale').value = preset.blurScale;
+        this.panel.querySelector('#shadowPenumbra').value = preset.penumbra;
+        this.panel.querySelector('#mainLightCastShadow').checked = preset.mainCastShadow;
+        this.panel.querySelector('#fillLightCastShadow').checked = preset.fillCastShadow;
+        
+        this.updateValueDisplays();
+        this.updateShadowsFromControls();
+    }
+    
+    updateControlsFromConfig() {
+        const config = window.lightingConfig;
+        if (!config) return;
+        
+        this.panel.querySelector('#shadowMapSize').value = config.shadows.mapSize;
+        this.panel.querySelector('#shadowCameraSize').value = config.shadows.cameraSize;
+        this.panel.querySelector('#shadowBiasControl').value = config.shadows.bias;
+        this.panel.querySelector('#shadowNormalBias').value = config.shadows.normalBias;
+        this.panel.querySelector('#mainLightCastShadow').checked = config.mainLight.castShadow;
+        this.panel.querySelector('#fillLightCastShadow').checked = config.fillLight.castShadow;
+        
+        this.updateValueDisplays();
+    }
+    
+    show() {
+        this.panel.style.display = 'block';
+        this.isVisible = true;
+        this.updateControlsFromConfig();
+    }
+    
+    hide() {
+        this.panel.style.display = 'none';
+        this.isVisible = false;
+    }
+    
+    toggle() {
+        if (this.isVisible) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+}
+
+// Initialize shadow console and add keyboard shortcut
+function initializeShadowConsole() {
+    window.shadowConsole = new ShadowDevConsole();
+    
+    // Add keyboard shortcut (Alt+S)
+    document.addEventListener('keydown', (e) => {
+        if (e.altKey && e.key.toLowerCase() === 's' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            window.shadowConsole.toggle();
+        }
+    });
+    
+    console.log('Shadow Dev Console initialized. Press Alt+S to open.');
+}
+
 // Initialize lighting console and add keyboard shortcut
 function initializeLightingConsole() {
     window.lightingConsole = new LightingDevConsole();
@@ -904,3 +1375,4 @@ window.closeColorModal = closeColorModal;
 window.insertColorSquare = insertColorSquare;
 window.recentColors = recentColors;
 window.initializeLightingConsole = initializeLightingConsole;
+window.initializeShadowConsole = initializeShadowConsole;
