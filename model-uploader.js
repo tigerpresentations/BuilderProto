@@ -265,7 +265,7 @@ class InspectorWorkflow {
         this.visualizer = null;
         this.currentModel = null;
         this.originalScale = null;
-        this.previewScale = null;
+        this.previewScaleFactor = null; // Renamed to avoid method collision
     }
 
     async handleFileUpload(file) {
@@ -413,7 +413,7 @@ class InspectorWorkflow {
         
         // Apply preview scale
         this.currentModel.scale.copy(this.originalScale).multiplyScalar(scaleFactor);
-        this.previewScale = scaleFactor;
+        this.previewScaleFactor = scaleFactor;
         
         // Update UI
         document.getElementById('inspector-scale-factor').textContent = scaleFactor.toFixed(3);
@@ -427,7 +427,7 @@ class InspectorWorkflow {
     }
 
     async saveToDatabase() {
-        if (!this.inspector || !this.uploadResult || !this.previewScale) {
+        if (!this.inspector || !this.uploadResult || !this.previewScaleFactor) {
             this.showMessage('Please preview scale before saving', 'warning');
             return;
         }
@@ -440,7 +440,7 @@ class InspectorWorkflow {
             const modelInfo = this.inspector.getModelInfo();
             
             // Calculate all dimensions in inches
-            const scaledSize = this.inspector.originalBounds.size.clone().multiplyScalar(this.previewScale);
+            const scaledSize = this.inspector.originalBounds.size.clone().multiplyScalar(this.previewScaleFactor);
             
             const assetData = {
                 name: document.getElementById('inspector-asset-name').value || this.uploadResult.originalName,
@@ -448,7 +448,7 @@ class InspectorWorkflow {
                 width_inches: ScaleCalculator.convertToInches(scaledSize.x, 'feet'), // Convert from Three.js units (feet) to inches
                 height_inches: ScaleCalculator.convertToInches(scaledSize.y, 'feet'),
                 depth_inches: ScaleCalculator.convertToInches(scaledSize.z, 'feet'),
-                model_scale_factor: this.previewScale,
+                model_scale_factor: this.previewScaleFactor,
                 bounding_box_json: JSON.stringify(this.inspector.originalBounds),
                 material_count: modelInfo.materialCount,
                 triangle_count: modelInfo.triangleCount,
@@ -473,7 +473,7 @@ class InspectorWorkflow {
     resetScale() {
         if (this.currentModel && this.originalScale) {
             this.currentModel.scale.copy(this.originalScale);
-            this.previewScale = null;
+            this.previewScaleFactor = null;
             document.getElementById('inspector-scale-factor').textContent = '1.000';
             this.visualizer.clearVisualizations();
         }
@@ -503,7 +503,7 @@ class InspectorWorkflow {
         this.inspector = null;
         this.currentModel = null;
         this.originalScale = null;
-        this.previewScale = null;
+        this.previewScaleFactor = null;
     }
 
     showMessage(message, type = 'info') {

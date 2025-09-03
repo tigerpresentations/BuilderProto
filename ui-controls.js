@@ -1663,20 +1663,12 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const previewButton = document.getElementById('inspector-preview-scale');
     if (previewButton) {
         previewButton.addEventListener('click', () => {
-            console.log('Preview Scale clicked');
-            console.log('local uploaderWorkflow:', uploaderWorkflow);
-            console.log('window.uploaderWorkflow:', window.uploaderWorkflow);
-            console.log('typeof check:', typeof uploaderWorkflow.previewScale);
-            
-            // Use the global reference as backup
             const workflow = uploaderWorkflow || window.uploaderWorkflow;
             
             if (workflow && workflow.previewScale) {
-                console.log('Calling previewScale on workflow');
                 workflow.previewScale();
             } else {
                 console.error('previewScale method not available');
-                console.log('workflow object:', workflow);
                 showNotification('Error: Inspector not properly initialized', 'error');
             }
         });
