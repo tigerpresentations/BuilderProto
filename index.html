@@ -323,12 +323,15 @@
                 <span class="panel-toggle">▼</span>
             </div>
             <div class="panel-content">
-                <!-- GLB Model Loading (Admin Only) -->
+                <!-- GLB Model Upload (Admin Only) -->
                 <div class="control-group">
-                    <label>Load GLB Model</label>
+                    <label>Upload GLB Model to Database</label>
                     <div class="file-input-wrapper">
-                        <input type="file" id="glb-file-input" accept=".glb,.gltf" />
-                        <span class="file-input-display">Choose GLB File</span>
+                        <input type="file" id="glb-upload-input" accept=".glb,.gltf" />
+                        <span class="file-input-display">Choose GLB to Upload</span>
+                    </div>
+                    <div id="upload-progress" style="display: none; margin-top: 8px; padding: 6px; background: rgba(0,132,255,0.1); border-radius: 3px; font-size: 10px; color: #0084ff;">
+                        Uploading...
                     </div>
                 </div>
                 
@@ -357,6 +360,95 @@
                         <div>User Type: <span id="admin-user-type" style="color: #ff6b6b;">-</span></div>
                         <div>Group: <span id="admin-user-group" style="color: #888;">-</span></div>
                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Model Inspector Panel - Admin Only -->
+        <div class="collapsible-panel admin-panel" id="inspector-panel" style="display: none;">
+            <div class="panel-header admin-header" data-panel="inspector-controls">
+                <span>🔍 Model Inspector</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <!-- Asset Information -->
+                <div class="control-group">
+                    <label>Asset Name</label>
+                    <input type="text" id="inspector-asset-name" placeholder="Enter asset name">
+                </div>
+                
+                <div class="control-group">
+                    <label>Description</label>
+                    <input type="text" id="inspector-description" placeholder="Optional description">
+                </div>
+                
+                <!-- Current Dimensions Display -->
+                <div class="control-group">
+                    <label style="color: #0084ff;">Current Size (Three.js units)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px; color: #ccc;">
+                        <div>Width: <span id="inspector-current-width" style="color: #fff;">0.00</span></div>
+                        <div>Height: <span id="inspector-current-height" style="color: #fff;">0.00</span></div>
+                        <div>Depth: <span id="inspector-current-depth" style="color: #fff;">0.00</span></div>
+                    </div>
+                </div>
+                
+                <!-- Model Information -->
+                <div class="control-group">
+                    <label style="color: #888;">Model Info</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; color: #ccc;">
+                        <div>Materials: <span id="inspector-material-count" style="color: #fff;">0</span></div>
+                        <div>Triangles: <span id="inspector-triangle-count" style="color: #fff;">0</span></div>
+                    </div>
+                </div>
+                
+                <!-- Real-World Input -->
+                <div class="control-group">
+                    <label style="color: #ff6b6b;">Real-World Dimensions</label>
+                    <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+                        <select id="inspector-dimension-type" style="flex: 1;">
+                            <option value="height">Height</option>
+                            <option value="width">Width</option>
+                            <option value="depth">Depth</option>
+                        </select>
+                        <input type="number" id="inspector-real-value" step="0.1" placeholder="91" style="flex: 1;">
+                        <select id="inspector-units" style="flex: 1;">
+                            <option value="inches">inches</option>
+                            <option value="feet">feet</option>
+                            <option value="centimeters">cm</option>
+                            <option value="meters">meters</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Scale Preview -->
+                <div class="control-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="color: #00ff88;">Scale Factor:</label>
+                        <span id="inspector-scale-factor" style="color: #00ff88; font-weight: 500;">1.000</span>
+                    </div>
+                    <div id="inspector-validation-message" style="font-size: 10px; color: #ff6b6b; margin-bottom: 8px;"></div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="control-group">
+                    <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+                        <button id="inspector-preview-scale" style="flex: 1; background: #0084ff; border-color: #0084ff;">Preview Scale</button>
+                        <button id="inspector-reset-scale" style="flex: 1;">Reset</button>
+                    </div>
+                    <button id="inspector-save-database" style="width: 100%; background: #28a745; border-color: #28a745; margin-bottom: 8px;">Save to Database</button>
+                    <button id="inspector-close" style="width: 100%; background: #6c757d; border-color: #6c757d;">Close Inspector</button>
+                </div>
+                
+                <!-- Visual Aids Toggle -->
+                <div class="control-group">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px;">
+                        <input type="checkbox" id="inspector-show-reference" style="margin: 0; vertical-align: middle;">
+                        Show Reference Objects
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; margin-top: 4px;">
+                        <input type="checkbox" id="inspector-show-bounds" style="margin: 0; vertical-align: middle;">
+                        Show Bounding Box
+                    </label>
                 </div>
             </div>
         </div>
@@ -453,6 +545,7 @@
     <script src="simple-coordinate-system.js"></script>
     <script src="scene-manager.js"></script>
     <script src="model-loader.js"></script>
+    <script src="model-uploader.js"></script>
     <script src="object-selector.js"></script>
     <!-- Simple layer system - works entirely in 512x512 space -->
     <script src="simple-layer-manager.js"></script>

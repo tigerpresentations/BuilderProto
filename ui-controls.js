@@ -1575,6 +1575,169 @@ function initializeLightingConsole() {
     console.log('Lighting Dev Console initialized. Press Alt+L to open.');
 }
 
+// Model Uploader and Inspector Integration
+function setupUploaderAndInspector() {
+    // Check if we have Supabase client (should be available via auth)
+    if (!window.authManager || !window.authManager.supabase) {
+        console.warn('Supabase client not available for uploader');
+        return;
+    }
+
+    // Initialize uploader workflow
+    const uploaderWorkflow = new window.InspectorWorkflow(window.authManager.supabase);
+    
+    // GLB Upload Input Handler
+    const glbUploadInput = document.getElementById('glb-upload-input');
+    if (glbUploadInput) {
+        glbUploadInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file || !file.name.toLowerCase().endsWith('.glb')) {
+                showNotification('Please select a valid GLB file', 'error');
+                return;
+            }
+
+            // Check admin access
+            if (!window.authManager.isAdmin()) {
+                showNotification('Admin access required for model uploads', 'error');
+                return;
+            }
+
+            try {
+                // Show progress
+                const progressElement = document.getElementById('upload-progress');
+                if (progressElement) {
+                    progressElement.style.display = 'block';
+                    progressElement.textContent = 'Uploading file...';
+                }
+
+                // Hide drop zone
+                const dropZone = document.getElementById('drop-zone');
+                if (dropZone) dropZone.classList.add('hidden');
+
+                // Handle upload and launch inspector
+                await uploaderWorkflow.handleFileUpload(file);
+
+                // Hide progress
+                if (progressElement) {
+                    progressElement.style.display = 'none';
+                }
+
+            } catch (error) {
+                console.error('Upload failed:', error);
+                const progressElement = document.getElementById('upload-progress');
+                if (progressElement) {
+                    progressElement.style.display = 'none';
+                }
+                showNotification('Upload failed: ' + error.message, 'error');
+            }
+
+            // Reset file input
+            event.target.value = '';
+        });
+    }
+
+    // Inspector Event Handlers
+    setupInspectorEventHandlers(uploaderWorkflow);
+}
+
+function setupInspectorEventHandlers(uploaderWorkflow) {
+    // Preview Scale Button
+    const previewButton = document.getElementById('inspector-preview-scale');
+    if (previewButton) {
+        previewButton.addEventListener('click', () => {
+            uploaderWorkflow.previewScale();
+        });
+    }
+
+    // Reset Scale Button
+    const resetButton = document.getElementById('inspector-reset-scale');
+    if (resetButton) {
+        resetButton.addEventListener('click', () => {
+            uploaderWorkflow.resetScale();
+        });
+    }
+
+    // Save to Database Button
+    const saveButton = document.getElementById('inspector-save-database');
+    if (saveButton) {
+        saveButton.addEventListener('click', async () => {
+            try {
+                await uploaderWorkflow.saveToDatabase();
+            } catch (error) {
+                console.error('Save failed:', error);
+            }
+        });
+    }
+
+    // Close Inspector Button
+    const closeButton = document.getElementById('inspector-close');
+    if (closeButton) {
+        closeButton.addEventListener('click', () => {
+            uploaderWorkflow.hideInspectorPanel();
+        });
+    }
+
+    // Reference Objects Toggle
+    const referenceToggle = document.getElementById('inspector-show-reference');
+    if (referenceToggle) {
+        referenceToggle.addEventListener('change', (e) => {
+            uploaderWorkflow.toggleReference(e.target.checked);
+        });
+    }
+
+    // Bounding Box Toggle
+    const boundsToggle = document.getElementById('inspector-show-bounds');
+    if (boundsToggle) {
+        boundsToggle.addEventListener('change', (e) => {
+            if (uploaderWorkflow.visualizer && uploaderWorkflow.currentModel) {
+                if (e.target.checked) {
+                    uploaderWorkflow.visualizer.showBoundingBox(uploaderWorkflow.currentModel);
+                } else if (uploaderWorkflow.visualizer.currentBoundingBox) {
+                    uploaderWorkflow.visualizer.referenceObjects.remove(uploaderWorkflow.visualizer.currentBoundingBox);
+                    uploaderWorkflow.visualizer.currentBoundingBox = null;
+                }
+            }
+        });
+    }
+
+    // Real-time scale preview on input changes
+    const realValueInput = document.getElementById('inspector-real-value');
+    const dimensionSelect = document.getElementById('inspector-dimension-type');
+    const unitsSelect = document.getElementById('inspector-units');
+
+    const updateScaleFactor = () => {
+        if (!uploaderWorkflow.inspector) return;
+        
+        const realValue = parseFloat(realValueInput.value);
+        const dimension = dimensionSelect.value;
+        const units = unitsSelect.value;
+        
+        if (realValue > 0) {
+            const currentDimension = uploaderWorkflow.inspector.measurements[dimension];
+            const scaleFactor = window.ScaleCalculator.calculateScaleFactor(currentDimension, realValue, units);
+            
+            document.getElementById('inspector-scale-factor').textContent = scaleFactor.toFixed(3);
+            
+            // Validation
+            const validation = window.ScaleCalculator.validateScaleFactor(scaleFactor);
+            const messageElement = document.getElementById('inspector-validation-message');
+            if (!validation.isValid) {
+                messageElement.textContent = 'Scale factor out of range (0.001 - 1000)';
+                messageElement.style.color = '#ff6b6b';
+            } else if (validation.warning) {
+                messageElement.textContent = validation.warning;
+                messageElement.style.color = '#ffa500';
+            } else {
+                messageElement.textContent = '';
+            }
+        }
+    };
+
+    if (realValueInput) realValueInput.addEventListener('input', updateScaleFactor);
+    if (dimensionSelect) dimensionSelect.addEventListener('change', updateScaleFactor);
+    if (unitsSelect) unitsSelect.addEventListener('change', updateScaleFactor);
+}
+
 // Export functions
 window.setupUISystem = setupUISystem;
 window.initializeControls = initializeControls;
@@ -1584,3 +1747,5 @@ window.insertColorSquare = insertColorSquare;
 window.recentColors = recentColors;
 window.initializeLightingConsole = initializeLightingConsole;
 window.initializeShadowConsole = initializeShadowConsole;
+window.setupUploaderAndInspector = setupUploaderAndInspector;
+window.showNotification = showNotification;

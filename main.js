@@ -281,6 +281,13 @@ function initializeApplication() {
         initializeControls();
     }
     
+    // 10.5. Initialize uploader and inspector
+    setTimeout(() => {
+        if (typeof setupUploaderAndInspector === 'function') {
+            setupUploaderAndInspector();
+        }
+    }, 1000); // Wait for auth to initialize
+    
     // 11. Initialize lighting console if available
     if (typeof initializeLightingConsole === 'function') {
         initializeLightingConsole();
@@ -312,11 +319,7 @@ function initializeApplication() {
 
 // Setup image tool event handlers
 function setupImageToolEventHandlers() {
-    // GLB file upload (now in admin panel only)
-    const glbFileInput = document.getElementById('glb-file-input');
-    if (glbFileInput) {
-        glbFileInput.addEventListener('change', handleGLBUpload);
-    }
+    // GLB file upload is now handled by uploader system
     
     // Image upload
     const imageUpload = document.getElementById('image-upload');
@@ -376,26 +379,6 @@ function setupImageToolEventHandlers() {
             setTextureQuality(newQuality);
         });
     }
-}
-
-// Handle GLB file upload
-function handleGLBUpload(event) {
-    const file = event.target.files[0];
-    if (file && file.name.toLowerCase().endsWith('.glb')) {
-        // Hide drop zone
-        const dropZone = document.getElementById('drop-zone');
-        if (dropZone) {
-            dropZone.classList.add('hidden');
-        }
-        
-        // Load the GLB file
-        if (window.loadGLBFile && window.scene) {
-            window.loadGLBFile(file, window.scene);
-        }
-    }
-    
-    // Reset file input
-    event.target.value = '';
 }
 
 // Handle multiple image uploads
