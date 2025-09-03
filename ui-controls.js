@@ -1664,13 +1664,19 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     if (previewButton) {
         previewButton.addEventListener('click', () => {
             console.log('Preview Scale clicked');
-            console.log('uploaderWorkflow:', uploaderWorkflow);
-            console.log('uploaderWorkflow methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(uploaderWorkflow)));
+            console.log('local uploaderWorkflow:', uploaderWorkflow);
+            console.log('window.uploaderWorkflow:', window.uploaderWorkflow);
+            console.log('typeof check:', typeof uploaderWorkflow.previewScale);
             
-            if (uploaderWorkflow && typeof uploaderWorkflow.previewScale === 'function') {
-                uploaderWorkflow.previewScale();
+            // Use the global reference as backup
+            const workflow = uploaderWorkflow || window.uploaderWorkflow;
+            
+            if (workflow && workflow.previewScale) {
+                console.log('Calling previewScale on workflow');
+                workflow.previewScale();
             } else {
-                console.error('previewScale method not available or uploaderWorkflow is null');
+                console.error('previewScale method not available');
+                console.log('workflow object:', workflow);
                 showNotification('Error: Inspector not properly initialized', 'error');
             }
         });
@@ -1680,8 +1686,9 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const resetButton = document.getElementById('inspector-reset-scale');
     if (resetButton) {
         resetButton.addEventListener('click', () => {
-            if (uploaderWorkflow && typeof uploaderWorkflow.resetScale === 'function') {
-                uploaderWorkflow.resetScale();
+            const workflow = uploaderWorkflow || window.uploaderWorkflow;
+            if (workflow && workflow.resetScale) {
+                workflow.resetScale();
             } else {
                 console.error('resetScale method not available');
                 showNotification('Error: Inspector not properly initialized', 'error');
@@ -1693,9 +1700,10 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const saveButton = document.getElementById('inspector-save-database');
     if (saveButton) {
         saveButton.addEventListener('click', async () => {
-            if (uploaderWorkflow && typeof uploaderWorkflow.saveToDatabase === 'function') {
+            const workflow = uploaderWorkflow || window.uploaderWorkflow;
+            if (workflow && workflow.saveToDatabase) {
                 try {
-                    await uploaderWorkflow.saveToDatabase();
+                    await workflow.saveToDatabase();
                 } catch (error) {
                     console.error('Save failed:', error);
                 }
@@ -1710,7 +1718,10 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const closeButton = document.getElementById('inspector-close');
     if (closeButton) {
         closeButton.addEventListener('click', () => {
-            uploaderWorkflow.hideInspectorPanel();
+            const workflow = uploaderWorkflow || window.uploaderWorkflow;
+            if (workflow && workflow.hideInspectorPanel) {
+                workflow.hideInspectorPanel();
+            }
         });
     }
 
@@ -1718,7 +1729,10 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const referenceToggle = document.getElementById('inspector-show-reference');
     if (referenceToggle) {
         referenceToggle.addEventListener('change', (e) => {
-            uploaderWorkflow.toggleReference(e.target.checked);
+            const workflow = uploaderWorkflow || window.uploaderWorkflow;
+            if (workflow && workflow.toggleReference) {
+                workflow.toggleReference(e.target.checked);
+            }
         });
     }
 
@@ -1726,12 +1740,13 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const boundsToggle = document.getElementById('inspector-show-bounds');
     if (boundsToggle) {
         boundsToggle.addEventListener('change', (e) => {
-            if (uploaderWorkflow.visualizer && uploaderWorkflow.currentModel) {
+            const workflow = uploaderWorkflow || window.uploaderWorkflow;
+            if (workflow && workflow.visualizer && workflow.currentModel) {
                 if (e.target.checked) {
-                    uploaderWorkflow.visualizer.showBoundingBox(uploaderWorkflow.currentModel);
-                } else if (uploaderWorkflow.visualizer.currentBoundingBox) {
-                    uploaderWorkflow.visualizer.referenceObjects.remove(uploaderWorkflow.visualizer.currentBoundingBox);
-                    uploaderWorkflow.visualizer.currentBoundingBox = null;
+                    workflow.visualizer.showBoundingBox(workflow.currentModel);
+                } else if (workflow.visualizer.currentBoundingBox) {
+                    workflow.visualizer.referenceObjects.remove(workflow.visualizer.currentBoundingBox);
+                    workflow.visualizer.currentBoundingBox = null;
                 }
             }
         });
@@ -1743,14 +1758,15 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const unitsSelect = document.getElementById('inspector-units');
 
     const updateScaleFactor = () => {
-        if (!uploaderWorkflow.inspector) return;
+        const workflow = uploaderWorkflow || window.uploaderWorkflow;
+        if (!workflow || !workflow.inspector) return;
         
         const realValue = parseFloat(realValueInput.value);
         const dimension = dimensionSelect.value;
         const units = unitsSelect.value;
         
         if (realValue > 0) {
-            const currentDimension = uploaderWorkflow.inspector.measurements[dimension];
+            const currentDimension = workflow.inspector.measurements[dimension];
             const scaleFactor = window.ScaleCalculator.calculateScaleFactor(currentDimension, realValue, units);
             
             document.getElementById('inspector-scale-factor').textContent = scaleFactor.toFixed(3);
