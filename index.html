@@ -205,6 +205,27 @@
         .library-model-item.selected:hover {
             background: #0066cc !important;
         }
+        
+        /* Model Library Panel Positioning */
+        #library-panel.panel-collapsed { 
+            width: auto; 
+            max-width: 200px; 
+        }
+        
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 1200px) {
+            #library-panel {
+                left: 300px !important;
+                width: 280px !important;
+            }
+        }
+        
+        @media (max-width: 1000px) {
+            #library-panel {
+                left: 290px !important;
+                width: 260px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -474,13 +495,32 @@
             </div>
         </div>
         
-        <!-- Model Library Panel -->
-        <div class="collapsible-panel" id="library-panel" style="display: none;">
-            <div class="panel-header" data-panel="library-controls">
+        <!-- Status -->
+        <div class="control-group">
+            <div id="status" style="font-size: 10px; color: #666;">Drop a GLB file to begin</div>
+            <div id="performance-info" style="margin-top: 4px; font-size: 10px; color: #666;">Performance: 60 FPS</div>
+            <div id="quality-info" style="margin-top: 4px; font-size: 10px; color: #666;">Resolution: 1024x1024</div>
+            
+            <!-- Object Selection Info -->
+            <div class="control-group" id="selection-info" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+                <label style="color: #0084ff;">Selected Object</label>
+                <div style="font-size: 11px; color: #ccc;">
+                    <div>Name: <span id="selected-name" style="color: #fff;">-</span></div>
+                    <div>UUID: <span id="selected-uuid" style="color: #888; font-size: 10px;">-</span></div>
+                    <div>Position: <span id="selected-position" style="color: #fff;">-</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Model Library Panel -->
+    <div id="library-panel" style="position: fixed; top: 10px; left: 310px; background: rgba(20, 20, 20, 0.95); border: 1px solid #333; border-radius: 6px; width: 320px; max-height: calc(100vh - 40px); overflow-y: auto; z-index: 100; font-size: 12px; backdrop-filter: blur(10px); display: none;">
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="library-controls" data-target="library-panel">
                 <span>📚 Model Library</span>
                 <span class="panel-toggle">▼</span>
             </div>
-            <div class="panel-content">
+            <div class="panel-content" style="padding: 12px;">
                 <!-- Search and Filter -->
                 <div class="control-group">
                     <label>Search Models</label>
@@ -515,23 +555,6 @@
                         <button id="library-load-model" style="flex: 1; background: #0084ff; border-color: #0084ff;" disabled>Load Model</button>
                         <button id="library-close" style="flex: 1; background: #6c757d; border-color: #6c757d;">Close</button>
                     </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Status -->
-        <div class="control-group">
-            <div id="status" style="font-size: 10px; color: #666;">Drop a GLB file to begin</div>
-            <div id="performance-info" style="margin-top: 4px; font-size: 10px; color: #666;">Performance: 60 FPS</div>
-            <div id="quality-info" style="margin-top: 4px; font-size: 10px; color: #666;">Resolution: 1024x1024</div>
-            
-            <!-- Object Selection Info -->
-            <div class="control-group" id="selection-info" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
-                <label style="color: #0084ff;">Selected Object</label>
-                <div style="font-size: 11px; color: #ccc;">
-                    <div>Name: <span id="selected-name" style="color: #fff;">-</span></div>
-                    <div>UUID: <span id="selected-uuid" style="color: #888; font-size: 10px;">-</span></div>
-                    <div>Position: <span id="selected-position" style="color: #fff;">-</span></div>
                 </div>
             </div>
         </div>

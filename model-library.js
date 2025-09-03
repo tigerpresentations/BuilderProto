@@ -101,6 +101,14 @@ class ModelLibraryBrowser {
             this.isVisible = true;
             console.log('📚 Model library panel shown');
             
+            // Initialize UI panel support if not already done
+            if (!panel.hasAttribute('data-ui-initialized')) {
+                if (window.UIPanel) {
+                    new window.UIPanel(panel);
+                    panel.setAttribute('data-ui-initialized', 'true');
+                }
+            }
+            
             // Load models if not already loaded
             if (this.library.models.length === 0) {
                 await this.loadModels();
