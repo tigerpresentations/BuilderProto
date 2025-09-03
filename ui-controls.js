@@ -1663,7 +1663,16 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const previewButton = document.getElementById('inspector-preview-scale');
     if (previewButton) {
         previewButton.addEventListener('click', () => {
-            uploaderWorkflow.previewScale();
+            console.log('Preview Scale clicked');
+            console.log('uploaderWorkflow:', uploaderWorkflow);
+            console.log('uploaderWorkflow methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(uploaderWorkflow)));
+            
+            if (uploaderWorkflow && typeof uploaderWorkflow.previewScale === 'function') {
+                uploaderWorkflow.previewScale();
+            } else {
+                console.error('previewScale method not available or uploaderWorkflow is null');
+                showNotification('Error: Inspector not properly initialized', 'error');
+            }
         });
     }
 
@@ -1671,7 +1680,12 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const resetButton = document.getElementById('inspector-reset-scale');
     if (resetButton) {
         resetButton.addEventListener('click', () => {
-            uploaderWorkflow.resetScale();
+            if (uploaderWorkflow && typeof uploaderWorkflow.resetScale === 'function') {
+                uploaderWorkflow.resetScale();
+            } else {
+                console.error('resetScale method not available');
+                showNotification('Error: Inspector not properly initialized', 'error');
+            }
         });
     }
 
@@ -1679,10 +1693,15 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     const saveButton = document.getElementById('inspector-save-database');
     if (saveButton) {
         saveButton.addEventListener('click', async () => {
-            try {
-                await uploaderWorkflow.saveToDatabase();
-            } catch (error) {
-                console.error('Save failed:', error);
+            if (uploaderWorkflow && typeof uploaderWorkflow.saveToDatabase === 'function') {
+                try {
+                    await uploaderWorkflow.saveToDatabase();
+                } catch (error) {
+                    console.error('Save failed:', error);
+                }
+            } else {
+                console.error('saveToDatabase method not available');
+                showNotification('Error: Inspector not properly initialized', 'error');
             }
         });
     }

@@ -382,7 +382,14 @@ class InspectorWorkflow {
     }
 
     previewScale() {
-        if (!this.inspector || !this.currentModel) return;
+        console.log('previewScale called');
+        console.log('inspector:', this.inspector);
+        console.log('currentModel:', this.currentModel);
+        
+        if (!this.inspector || !this.currentModel) {
+            this.showMessage('Please upload a model first', 'warning');
+            return;
+        }
 
         const dimensionType = document.getElementById('inspector-dimension-type').value;
         const realValue = parseFloat(document.getElementById('inspector-real-value').value);
@@ -476,6 +483,7 @@ class InspectorWorkflow {
         const panel = document.getElementById('inspector-panel');
         if (panel) {
             panel.style.display = 'block';
+            console.log('✅ Inspector panel shown');
         }
     }
 
@@ -483,12 +491,19 @@ class InspectorWorkflow {
         const panel = document.getElementById('inspector-panel');
         if (panel) {
             panel.style.display = 'none';
+            console.log('Inspector panel hidden');
         }
         
         // Clean up visualizations
         if (this.visualizer) {
             this.visualizer.clearVisualizations();
         }
+        
+        // Reset inspector state
+        this.inspector = null;
+        this.currentModel = null;
+        this.originalScale = null;
+        this.previewScale = null;
     }
 
     showMessage(message, type = 'info') {
