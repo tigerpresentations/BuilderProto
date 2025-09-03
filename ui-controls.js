@@ -537,17 +537,22 @@ function initializeControls() {
     const floorDepthInput = document.getElementById('floor-depth-input');
     
     const updateFloorGeometry = () => {
-        if (window.floor && window.scene) {
-            const width = parseFloat(floorWidth.value);
-            const height = 0.05; // Fixed height
-            const depth = parseFloat(floorDepth.value);
+        if (window.floor && window.scene && window.feetToUnits) {
+            const widthFeet = parseFloat(floorWidth.value);
+            const depthFeet = parseFloat(floorDepth.value);
+            const heightFeet = 0.1; // Fixed 1.2 inch thickness
+            
+            // Convert feet to Three.js units
+            const width = window.feetToUnits(widthFeet);
+            const depth = window.feetToUnits(depthFeet);
+            const height = window.feetToUnits(heightFeet);
             
             // Sync input fields with sliders (only update if different to avoid cursor issues)
-            if (floorWidthInput && parseFloat(floorWidthInput.value) !== width) {
-                floorWidthInput.value = width.toFixed(1);
+            if (floorWidthInput && parseFloat(floorWidthInput.value) !== widthFeet) {
+                floorWidthInput.value = widthFeet.toFixed(1);
             }
-            if (floorDepthInput && parseFloat(floorDepthInput.value) !== depth) {
-                floorDepthInput.value = depth.toFixed(1);
+            if (floorDepthInput && parseFloat(floorDepthInput.value) !== depthFeet) {
+                floorDepthInput.value = depthFeet.toFixed(1);
             }
             
             // Dispose old geometry
@@ -558,26 +563,37 @@ function initializeControls() {
             // Create new geometry
             window.floor.geometry = new THREE.BoxGeometry(width, height, depth);
             window.floor.position.y = -height / 2;
+            
+            console.log(`Floor updated to ${widthFeet} x ${depthFeet} feet`);
         }
     };
     
     const updateFloorFromInput = () => {
-        if (window.floor && window.scene) {
-            let width = parseFloat(floorWidthInput.value) || 3;
-            let depth = parseFloat(floorDepthInput.value) || 3;
-            const height = 0.05; // Fixed height
+        if (window.floor && window.scene && window.feetToUnits) {
+            let widthFeet = parseFloat(floorWidthInput.value) || 10;
+            let depthFeet = parseFloat(floorDepthInput.value) || 10;
+            const heightFeet = 0.1; // Fixed 1.2 inch thickness
             
-            // Clamp values to slider range
-            width = Math.max(1, Math.min(10, width));
-            depth = Math.max(1, Math.min(10, depth));
+            // Clamp values to realistic booth range (6-30 feet)
+            widthFeet = Math.max(6, Math.min(30, widthFeet));
+            depthFeet = Math.max(6, Math.min(30, depthFeet));
+            
+            // Convert to Three.js units
+            const width = window.feetToUnits(widthFeet);
+            const depth = window.feetToUnits(depthFeet);
+            const height = window.feetToUnits(heightFeet);
             
             // Update sliders (only if different to avoid infinite loops)
-            if (floorWidth && parseFloat(floorWidth.value) !== width) {
-                floorWidth.value = width;
+            if (floorWidth && parseFloat(floorWidth.value) !== widthFeet) {
+                floorWidth.value = widthFeet;
             }
-            if (floorDepth && parseFloat(floorDepth.value) !== depth) {
-                floorDepth.value = depth;
+            if (floorDepth && parseFloat(floorDepth.value) !== depthFeet) {
+                floorDepth.value = depthFeet;
             }
+            
+            // Update input fields to clamped values
+            floorWidthInput.value = widthFeet.toFixed(1);
+            floorDepthInput.value = depthFeet.toFixed(1);
             
             // Dispose old geometry
             if (window.floor.geometry) {
@@ -587,6 +603,8 @@ function initializeControls() {
             // Create new geometry
             window.floor.geometry = new THREE.BoxGeometry(width, height, depth);
             window.floor.position.y = -height / 2;
+            
+            console.log(`Floor updated to ${widthFeet} x ${depthFeet} feet`);
         }
     };
     
@@ -604,18 +622,23 @@ function initializeControls() {
         floorDepthInput.addEventListener('blur', updateFloorFromInput);
     }
     
-    // Floor preset buttons
-    const setFloorPreset = (width, depth) => {
-        if (window.floor && window.scene) {
-            const height = 0.05; // Fixed height
+    // Floor preset buttons (dimensions in feet)
+    const setFloorPreset = (widthFeet, depthFeet) => {
+        if (window.floor && window.scene && window.feetToUnits) {
+            const heightFeet = 0.1; // Fixed 1.2 inch thickness
+            
+            // Convert to Three.js units
+            const width = window.feetToUnits(widthFeet);
+            const depth = window.feetToUnits(depthFeet);
+            const height = window.feetToUnits(heightFeet);
             
             // Update sliders
-            if (floorWidth) floorWidth.value = width;
-            if (floorDepth) floorDepth.value = depth;
+            if (floorWidth) floorWidth.value = widthFeet;
+            if (floorDepth) floorDepth.value = depthFeet;
             
             // Update input fields
-            if (floorWidthInput) floorWidthInput.value = width.toFixed(1);
-            if (floorDepthInput) floorDepthInput.value = depth.toFixed(1);
+            if (floorWidthInput) floorWidthInput.value = widthFeet.toFixed(1);
+            if (floorDepthInput) floorDepthInput.value = depthFeet.toFixed(1);
             
             // Dispose old geometry
             if (window.floor.geometry) {
@@ -625,6 +648,8 @@ function initializeControls() {
             // Create new geometry
             window.floor.geometry = new THREE.BoxGeometry(width, height, depth);
             window.floor.position.y = -height / 2;
+            
+            console.log(`Floor preset set to ${widthFeet} x ${depthFeet} feet`);
         }
     };
     
@@ -634,13 +659,13 @@ function initializeControls() {
     const floorPreset6x6 = document.getElementById('floor-preset-6x6');
     
     if (floorPreset3x3) {
-        floorPreset3x3.addEventListener('click', () => setFloorPreset(3, 3));
+        floorPreset3x3.addEventListener('click', () => setFloorPreset(10, 10)); // Standard 10x10 booth
     }
     if (floorPreset3x6) {
-        floorPreset3x6.addEventListener('click', () => setFloorPreset(6, 3)); // 6 width x 3 depth for 3x6
+        floorPreset3x6.addEventListener('click', () => setFloorPreset(20, 10)); // 10ft D x 20ft W
     }
     if (floorPreset6x6) {
-        floorPreset6x6.addEventListener('click', () => setFloorPreset(6, 6));
+        floorPreset6x6.addEventListener('click', () => setFloorPreset(20, 20)); // 20x20 booth
     }
     
     // Material controls

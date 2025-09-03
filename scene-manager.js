@@ -2,7 +2,26 @@
 let scene, camera, renderer, controls;
 let hemisphereLight, mainLight, fillLight, floor;
 
+// Scale conversion constants - 1 Three.js unit = 1 foot
+const SCALE = {
+    FEET_PER_UNIT: 1,
+    INCHES_TO_UNITS: 1/12,        // Convert inches to Three.js units
+    METERS_TO_UNITS: 3.28084,     // Convert meters to Three.js units
+    UNITS_TO_FEET: 1,
+    UNITS_TO_INCHES: 12,
+    UNITS_TO_METERS: 1/3.28084
+};
+
+// Scale conversion utility functions
+function inchesToUnits(inches) { return inches * SCALE.INCHES_TO_UNITS; }
+function feetToUnits(feet) { return feet * SCALE.FEET_PER_UNIT; }
+function metersToUnits(meters) { return meters * SCALE.METERS_TO_UNITS; }
+function unitsToInches(units) { return units * SCALE.UNITS_TO_INCHES; }
+function unitsToFeet(units) { return units * SCALE.UNITS_TO_FEET; }
+function unitsToMeters(units) { return units * SCALE.UNITS_TO_METERS; }
+
 // Lighting configuration object for dev panel
+// Positions now in realistic feet-based measurements
 window.lightingConfig = {
     hemisphere: {
         skyColor: 0x87ceeb,
@@ -12,13 +31,13 @@ window.lightingConfig = {
     mainLight: {
         color: 0xffffff,
         intensity: 1.2,
-        position: { x: 8, y: 12, z: 6 },
+        position: { x: 15, y: 12, z: 10 }, // 15ft away, 12ft high, 10ft side (in feet, converted in setupLighting)
         castShadow: true
     },
     fillLight: {
         color: 0xffffff,
         intensity: 0.3,
-        position: { x: -5, y: 8, z: -3 },
+        position: { x: -8, y: 8, z: -5 }, // 8ft opposite side, 8ft high (in feet, converted in setupLighting)
         castShadow: false
     },
     shadows: {
@@ -41,7 +60,9 @@ function setupScene() {
 
 function setupCamera() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(5, 5, 5);
+    // Position camera for human perspective in trade show environment
+    // 8 feet from booth, at eye level (5.5 feet), with slight viewing angle
+    camera.position.set(feetToUnits(8), feetToUnits(5.5), feetToUnits(6));
     return camera;
 }
 
@@ -79,7 +100,8 @@ function setupRenderer() {
     setupLighting();
     
     // Floor cube with Three.js material optimizations
-    const floorGeometry = new THREE.BoxGeometry(3, 0.05, 3);
+    // Default 10×10 foot trade show booth space
+    const floorGeometry = new THREE.BoxGeometry(feetToUnits(10), feetToUnits(0.1), feetToUnits(10));
     const floorMaterial = new THREE.MeshStandardMaterial({ 
         color: 0x333333, // Dark grey default
         roughness: 0.8,
@@ -89,7 +111,7 @@ function setupRenderer() {
         alphaTest: 0
     });
     floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.position.y = -0.025; // Half the height to sit on ground
+    floor.position.y = -feetToUnits(0.05); // Half the height to sit on ground
     floor.receiveShadow = true;
     floor.castShadow = true;
     scene.add(floor);
@@ -120,7 +142,11 @@ function setupLighting() {
     
     // Main directional light (key light)
     mainLight = new THREE.DirectionalLight(config.mainLight.color, config.mainLight.intensity);
-    mainLight.position.set(config.mainLight.position.x, config.mainLight.position.y, config.mainLight.position.z);
+    mainLight.position.set(
+        feetToUnits(config.mainLight.position.x), 
+        feetToUnits(config.mainLight.position.y), 
+        feetToUnits(config.mainLight.position.z)
+    );
     mainLight.castShadow = config.mainLight.castShadow;
     
     // Optimized shadow settings for better quality
@@ -151,7 +177,11 @@ function setupLighting() {
     
     // Fill light for softer shadows and better contrast
     fillLight = new THREE.DirectionalLight(config.fillLight.color, config.fillLight.intensity);
-    fillLight.position.set(config.fillLight.position.x, config.fillLight.position.y, config.fillLight.position.z);
+    fillLight.position.set(
+        feetToUnits(config.fillLight.position.x), 
+        feetToUnits(config.fillLight.position.y), 
+        feetToUnits(config.fillLight.position.z)
+    );
     fillLight.castShadow = config.fillLight.castShadow;
     
     // Apply blur settings to fill light if it casts shadows
@@ -193,7 +223,11 @@ function updateLighting() {
     // Update main light
     mainLight.color.setHex(config.mainLight.color);
     mainLight.intensity = config.mainLight.intensity;
-    mainLight.position.set(config.mainLight.position.x, config.mainLight.position.y, config.mainLight.position.z);
+    mainLight.position.set(
+        feetToUnits(config.mainLight.position.x), 
+        feetToUnits(config.mainLight.position.y), 
+        feetToUnits(config.mainLight.position.z)
+    );
     
     // Update shadow camera size
     const size = config.shadows.cameraSize;
@@ -214,7 +248,11 @@ function updateLighting() {
     // Update fill light
     fillLight.color.setHex(config.fillLight.color);
     fillLight.intensity = config.fillLight.intensity;
-    fillLight.position.set(config.fillLight.position.x, config.fillLight.position.y, config.fillLight.position.z);
+    fillLight.position.set(
+        feetToUnits(config.fillLight.position.x), 
+        feetToUnits(config.fillLight.position.y), 
+        feetToUnits(config.fillLight.position.z)
+    );
     fillLight.castShadow = config.fillLight.castShadow;
     
     // Update fill light blur settings if it casts shadows
@@ -235,6 +273,15 @@ function animate() {
     controls.update();
     renderer.render(scene, camera);
 }
+
+// Export scale utilities
+window.SCALE = SCALE;
+window.inchesToUnits = inchesToUnits;
+window.feetToUnits = feetToUnits;
+window.metersToUnits = metersToUnits;
+window.unitsToInches = unitsToInches;
+window.unitsToFeet = unitsToFeet;
+window.unitsToMeters = unitsToMeters;
 
 // Export functions
 window.setupScene = setupScene;
