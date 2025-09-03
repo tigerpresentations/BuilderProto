@@ -24,6 +24,16 @@
         .control-group input[type="range"] { padding: 0; height: 20px; }
         .control-group input:focus { outline: none; border-color: #0084ff; box-shadow: 0 0 0 2px rgba(0, 132, 255, 0.2); }
         
+        /* Hide spinner arrows for number inputs */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        
         button { background: #333; color: #fff; border: 1px solid #555; padding: 8px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; }
         button:hover { background: #444; }
         button:active { background: #222; }
@@ -187,9 +197,11 @@
                 <!-- Model Controls -->
                 <div id="model-controls" style="display: none;">
                     <div class="control-group">
-                        <label>Rotation Y</label>
-                        <input type="range" id="rot-y" min="0" max="360" step="1" value="0">
-                        <span class="slider-value" id="rot-y-val">0°</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label style="margin-bottom: 0;">Rotation Y</label>
+                            <input type="number" id="rot-y-input" min="0" max="360" step="1" value="0" style="width: 80px; -webkit-appearance: none; -moz-appearance: textfield;">
+                        </div>
+                        <input type="range" id="rot-y" min="0" max="360" step="1" value="0" style="width: 100%;">
                     </div>
                     <button id="clear-model-btn" style="display: none;">Clear Model</button>
                 </div>
@@ -218,14 +230,18 @@
             </div>
             <div class="panel-content">
                 <div class="control-group">
-                    <label>Brightness</label>
-                    <input type="range" id="material-brightness" min="0" max="3" step="0.01" value="1">
-                    <span class="slider-value" id="brightness-val">1.00</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label style="margin-bottom: 0;">Brightness</label>
+                        <input type="number" id="material-brightness-input" min="0" max="3" step="0.01" value="1" style="width: 80px; -webkit-appearance: none; -moz-appearance: textfield;">
+                    </div>
+                    <input type="range" id="material-brightness" min="0" max="3" step="0.01" value="1" style="width: 100%;">
                 </div>
                 <div class="control-group">
-                    <label>Lighting Intensity</label>
-                    <input type="range" id="lighting-intensity" min="0" max="3" step="0.01" value="1">
-                    <span class="slider-value" id="lighting-val">1.00</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label style="margin-bottom: 0;">Lighting Intensity</label>
+                        <input type="number" id="lighting-intensity-input" min="0" max="3" step="0.01" value="1" style="width: 80px; -webkit-appearance: none; -moz-appearance: textfield;">
+                    </div>
+                    <input type="range" id="lighting-intensity" min="0" max="3" step="0.01" value="1" style="width: 100%;">
                 </div>
                 <div class="control-group">
                     <label>Background Color</label>
@@ -236,14 +252,26 @@
                     <input type="color" id="floor-color" value="#333333">
                 </div>
                 <div class="control-group">
-                    <label>Floor Width</label>
-                    <input type="range" id="floor-width" min="1" max="10" step="0.1" value="3">
-                    <span class="slider-value" id="floor-width-val">3.0</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label style="margin-bottom: 0;">Floor Width</label>
+                        <input type="number" id="floor-width-input" min="1" max="10" step="0.1" value="3" style="width: 80px; -webkit-appearance: none; -moz-appearance: textfield;">
+                    </div>
+                    <input type="range" id="floor-width" min="1" max="10" step="0.1" value="3" style="width: 100%;">
                 </div>
                 <div class="control-group">
-                    <label>Floor Depth</label>
-                    <input type="range" id="floor-depth" min="1" max="10" step="0.1" value="3">
-                    <span class="slider-value" id="floor-depth-val">3.0</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <label style="margin-bottom: 0;">Floor Depth</label>
+                        <input type="number" id="floor-depth-input" min="1" max="10" step="0.1" value="3" style="width: 80px; -webkit-appearance: none; -moz-appearance: textfield;">
+                    </div>
+                    <input type="range" id="floor-depth" min="1" max="10" step="0.1" value="3" style="width: 100%;">
+                </div>
+                <div class="control-group">
+                    <label style="margin-bottom: 6px;">Floor Presets</label>
+                    <div style="display: flex; gap: 4px;">
+                        <button id="floor-preset-3x3" style="flex: 1; padding: 4px 8px; font-size: 10px;">3×3</button>
+                        <button id="floor-preset-3x6" style="flex: 1; padding: 4px 8px; font-size: 10px;">3×6</button>
+                        <button id="floor-preset-6x6" style="flex: 1; padding: 4px 8px; font-size: 10px;">6×6</button>
+                    </div>
                 </div>
                 <div class="control-group">
                     <button id="lighting-dev-btn">Lighting Console</button>
@@ -288,6 +316,16 @@
             <div id="status" style="font-size: 10px; color: #666;">Drop a GLB file to begin</div>
             <div id="performance-info" style="margin-top: 4px; font-size: 10px; color: #666;">Performance: 60 FPS</div>
             <div id="quality-info" style="margin-top: 4px; font-size: 10px; color: #666;">Resolution: 1024x1024</div>
+            
+            <!-- Object Selection Info -->
+            <div class="control-group" id="selection-info" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+                <label style="color: #0084ff;">Selected Object</label>
+                <div style="font-size: 11px; color: #ccc;">
+                    <div>Name: <span id="selected-name" style="color: #fff;">-</span></div>
+                    <div>UUID: <span id="selected-uuid" style="color: #888; font-size: 10px;">-</span></div>
+                    <div>Position: <span id="selected-position" style="color: #fff;">-</span></div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -365,6 +403,7 @@
     <script src="simple-coordinate-system.js"></script>
     <script src="scene-manager.js"></script>
     <script src="model-loader.js"></script>
+    <script src="object-selector.js"></script>
     <!-- Simple layer system - works entirely in 512x512 space -->
     <script src="simple-layer-manager.js"></script>
     <script src="simple-interactive-editor.js"></script>

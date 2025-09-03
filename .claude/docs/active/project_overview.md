@@ -8,6 +8,7 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 ### What Works
 - **GLB/GLTF Model Loading**: Drag-and-drop or file picker support for 3D models
 - **Automatic Material Detection**: Finds and applies textures to materials with "image" in their name
+- **3D Object Selection**: Click-to-select system with visual feedback and UI integration
 - **Real-Time Canvas-to-Texture Pipeline**: 1024x1024 canvas with adaptive quality fallback (512x512, 256x256)
 - **UV-Based Layer System**: Resolution-independent image layers with drag and resize capabilities
 - **Smooth Scaling System**: Enhanced 8-handle resize with boundary-aware scaling (allows 3x canvas size)
@@ -16,6 +17,8 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 - **Smart Selection System**: Clean texture output with multiple selection clearing methods (Escape key, click empty space, Clear Selection button)
 - **Smooth Camera Animation**: Double-click centering with 75% viewport coverage and 1-second easing
 - **Professional Lighting System**: Three-light setup with developer console and presets
+- **Enhanced Floor Controls**: Bi-directional sliders/inputs, preset buttons (3×3, 3×6, 6×6), intentionally non-selectable
+- **Unified Control Layout**: Consistent label+input/slider design across Brightness, Lighting Intensity, Rotation Y, and Floor controls
 - **Performance Monitoring**: FPS tracking with automatic quality adjustments
 - **Authentication Integration**: Supabase auth with login/logout functionality
 - **Scene Persistence**: Save/load functionality with JSON serialization
@@ -39,6 +42,7 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 - **main.js**: Application orchestrator with device detection
 - **scene-manager.js**: Three.js scene setup and management
 - **model-loader.js**: GLB/GLTF loading and material detection
+- **object-selector.js**: 3D object selection with raycasting and visual feedback
 - **simple-layer-manager.js**: UV-based image layer management
 - **simple-interactive-editor.js**: Mouse interaction handling
 - **auth.js**: Authentication integration
@@ -63,5 +67,15 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 The project is in active development with a stable core feature set. The modular architecture allows for easy extension and modification. The UV-based coordinate system ensures resolution independence and cross-device compatibility.
 
 ---
-**Last Updated**: 2025-09-02 15:45 UTC  
+**Last Updated**: 2025-09-03 (Enhanced Floor and UI Controls)  
 **Next Review**: Check after major feature additions or architectural changes
+
+## Recent Updates
+**2025-09-03**: 
+- Enhanced floor control system with bi-directional slider/input field synchronization
+- Added floor preset buttons for common dimensions (3×3, 3×6, 6×6) 
+- Unified control layout across all UI elements (Floor, Brightness, Lighting, Rotation Y)
+- Removed spinner arrows from number inputs for cleaner appearance
+- Made floor intentionally non-selectable to focus selection on 3D models
+- Fixed floor global export to enable control functionality
+- Improved text input behavior with proper event handling

@@ -206,6 +206,33 @@ function initializeApplication() {
     const uvTextureEditor = new UVTextureEditor();
     window.uvTextureEditor = uvTextureEditor;
     
+    // 5b. Initialize object selection system
+    const objectSelector = new ObjectSelector(scene, camera, renderer);
+    window.objectSelector = objectSelector;
+    
+    // Setup selection event listeners for UI updates
+    window.addEventListener('objectSelected', (event) => {
+        const selectionInfo = document.getElementById('selection-info');
+        const selectedName = document.getElementById('selected-name');
+        const selectedUuid = document.getElementById('selected-uuid');
+        const selectedPosition = document.getElementById('selected-position');
+        
+        if (selectionInfo && selectedName && selectedUuid && selectedPosition) {
+            selectionInfo.style.display = 'block';
+            selectedName.textContent = event.detail.name || 'Unnamed';
+            selectedUuid.textContent = event.detail.uuid.substring(0, 8) + '...';
+            const pos = event.detail.position;
+            selectedPosition.textContent = `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
+        }
+    });
+    
+    window.addEventListener('objectDeselected', () => {
+        const selectionInfo = document.getElementById('selection-info');
+        if (selectionInfo) {
+            selectionInfo.style.display = 'none';
+        }
+    });
+    
     // 6. Detect device capabilities
     const capabilities = detectDeviceCapabilities(renderer);
     console.log('Device capabilities:', capabilities);

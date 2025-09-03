@@ -94,6 +94,9 @@ function setupRenderer() {
     floor.castShadow = true;
     scene.add(floor);
     
+    // Export floor globally for controls
+    window.floor = floor;
+    
     // Handle resize
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;

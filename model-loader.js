@@ -137,6 +137,11 @@ function placeModelOnFloor(model, scene) {
         }
         window.controls.update();
     }
+    
+    // Update selectable objects for the object selector
+    if (window.objectSelector) {
+        window.objectSelector.updateSelectableObjects();
+    }
 }
 
 function cleanupModel(model) {
@@ -154,32 +159,63 @@ function cleanupModel(model) {
 function updateModelControls(model) {
     if (!model) return;
     
-    // Update sliders
+    // Update sliders and input fields
     const rotYSlider = document.getElementById('rot-y');
+    const rotYInput = document.getElementById('rot-y-input');
+    const rotation = (model.rotation.y * 180 / Math.PI) % 360;
     
-    if (rotYSlider) rotYSlider.value = (model.rotation.y * 180 / Math.PI) % 360;
-    
-    updateValueDisplays(model);
+    if (rotYSlider && parseFloat(rotYSlider.value) !== rotation) {
+        rotYSlider.value = rotation;
+    }
+    if (rotYInput && parseFloat(rotYInput.value) !== rotation) {
+        rotYInput.value = Math.round(rotation);
+    }
 }
 
 function updateValueDisplays(model) {
-    if (!model) return;
-    
-    const rotYVal = document.getElementById('rot-y-val');
-    
-    if (rotYVal) rotYVal.textContent = Math.round(model.rotation.y * 180 / Math.PI) + '°';
+    // This function is no longer needed since we removed the display spans
+    // But keeping it for compatibility
 }
 
 function setupModelControlListeners() {
-    // Model control sliders - only rotation remains
+    // Model control sliders and inputs
     const rotYSlider = document.getElementById('rot-y');
+    const rotYInput = document.getElementById('rot-y-input');
+    
     if (rotYSlider) {
         rotYSlider.addEventListener('input', (e) => {
             if (currentModel) {
-                currentModel.rotation.y = parseFloat(e.target.value) * Math.PI / 180;
-                updateValueDisplays(currentModel);
+                const rotation = parseFloat(e.target.value);
+                currentModel.rotation.y = rotation * Math.PI / 180;
+                
+                // Sync input field
+                if (rotYInput && parseFloat(rotYInput.value) !== rotation) {
+                    rotYInput.value = Math.round(rotation);
+                }
             }
         });
+    }
+    
+    if (rotYInput) {
+        const updateRotationFromInput = () => {
+            if (currentModel) {
+                let rotation = parseFloat(rotYInput.value) || 0;
+                rotation = ((rotation % 360) + 360) % 360; // Normalize to 0-360
+                
+                currentModel.rotation.y = rotation * Math.PI / 180;
+                
+                // Sync slider
+                if (rotYSlider && parseFloat(rotYSlider.value) !== rotation) {
+                    rotYSlider.value = rotation;
+                }
+                
+                // Update input to normalized value
+                rotYInput.value = Math.round(rotation);
+            }
+        };
+        
+        rotYInput.addEventListener('change', updateRotationFromInput);
+        rotYInput.addEventListener('blur', updateRotationFromInput);
     }
     
     // Clear model button

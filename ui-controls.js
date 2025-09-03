@@ -533,6 +533,8 @@ function initializeControls() {
     
     const floorWidth = document.getElementById('floor-width');
     const floorDepth = document.getElementById('floor-depth');
+    const floorWidthInput = document.getElementById('floor-width-input');
+    const floorDepthInput = document.getElementById('floor-depth-input');
     
     const updateFloorGeometry = () => {
         if (window.floor && window.scene) {
@@ -540,9 +542,13 @@ function initializeControls() {
             const height = 0.05; // Fixed height
             const depth = parseFloat(floorDepth.value);
             
-            // Update display values
-            document.getElementById('floor-width-val').textContent = width.toFixed(1);
-            document.getElementById('floor-depth-val').textContent = depth.toFixed(1);
+            // Sync input fields with sliders (only update if different to avoid cursor issues)
+            if (floorWidthInput && parseFloat(floorWidthInput.value) !== width) {
+                floorWidthInput.value = width.toFixed(1);
+            }
+            if (floorDepthInput && parseFloat(floorDepthInput.value) !== depth) {
+                floorDepthInput.value = depth.toFixed(1);
+            }
             
             // Dispose old geometry
             if (window.floor.geometry) {
@@ -555,20 +561,101 @@ function initializeControls() {
         }
     };
     
+    const updateFloorFromInput = () => {
+        if (window.floor && window.scene) {
+            let width = parseFloat(floorWidthInput.value) || 3;
+            let depth = parseFloat(floorDepthInput.value) || 3;
+            const height = 0.05; // Fixed height
+            
+            // Clamp values to slider range
+            width = Math.max(1, Math.min(10, width));
+            depth = Math.max(1, Math.min(10, depth));
+            
+            // Update sliders (only if different to avoid infinite loops)
+            if (floorWidth && parseFloat(floorWidth.value) !== width) {
+                floorWidth.value = width;
+            }
+            if (floorDepth && parseFloat(floorDepth.value) !== depth) {
+                floorDepth.value = depth;
+            }
+            
+            // Dispose old geometry
+            if (window.floor.geometry) {
+                window.floor.geometry.dispose();
+            }
+            
+            // Create new geometry
+            window.floor.geometry = new THREE.BoxGeometry(width, height, depth);
+            window.floor.position.y = -height / 2;
+        }
+    };
+    
+    // Add event listeners for sliders (immediate feedback while dragging)
     if (floorWidth) floorWidth.addEventListener('input', updateFloorGeometry);
     if (floorDepth) floorDepth.addEventListener('input', updateFloorGeometry);
+    
+    // Add event listeners for input fields (only on change/blur to avoid interference)
+    if (floorWidthInput) {
+        floorWidthInput.addEventListener('change', updateFloorFromInput);
+        floorWidthInput.addEventListener('blur', updateFloorFromInput);
+    }
+    if (floorDepthInput) {
+        floorDepthInput.addEventListener('change', updateFloorFromInput);
+        floorDepthInput.addEventListener('blur', updateFloorFromInput);
+    }
+    
+    // Floor preset buttons
+    const setFloorPreset = (width, depth) => {
+        if (window.floor && window.scene) {
+            const height = 0.05; // Fixed height
+            
+            // Update sliders
+            if (floorWidth) floorWidth.value = width;
+            if (floorDepth) floorDepth.value = depth;
+            
+            // Update input fields
+            if (floorWidthInput) floorWidthInput.value = width.toFixed(1);
+            if (floorDepthInput) floorDepthInput.value = depth.toFixed(1);
+            
+            // Dispose old geometry
+            if (window.floor.geometry) {
+                window.floor.geometry.dispose();
+            }
+            
+            // Create new geometry
+            window.floor.geometry = new THREE.BoxGeometry(width, height, depth);
+            window.floor.position.y = -height / 2;
+        }
+    };
+    
+    // Add event listeners for preset buttons
+    const floorPreset3x3 = document.getElementById('floor-preset-3x3');
+    const floorPreset3x6 = document.getElementById('floor-preset-3x6');
+    const floorPreset6x6 = document.getElementById('floor-preset-6x6');
+    
+    if (floorPreset3x3) {
+        floorPreset3x3.addEventListener('click', () => setFloorPreset(3, 3));
+    }
+    if (floorPreset3x6) {
+        floorPreset3x6.addEventListener('click', () => setFloorPreset(6, 3)); // 6 width x 3 depth for 3x6
+    }
+    if (floorPreset6x6) {
+        floorPreset6x6.addEventListener('click', () => setFloorPreset(6, 6));
+    }
     
     // Material controls
     const materialBrightness = document.getElementById('material-brightness');
     const lightingIntensity = document.getElementById('lighting-intensity');
+    const materialBrightnessInput = document.getElementById('material-brightness-input');
+    const lightingIntensityInput = document.getElementById('lighting-intensity-input');
     
     const updateMaterialProperties = () => {
         if (window.currentModel) {
             const brightness = parseFloat(materialBrightness?.value || 1);
             
-            // Update display values
-            if (document.getElementById('brightness-val')) {
-                document.getElementById('brightness-val').textContent = brightness.toFixed(2);
+            // Sync input field with slider
+            if (materialBrightnessInput && parseFloat(materialBrightnessInput.value) !== brightness) {
+                materialBrightnessInput.value = brightness.toFixed(2);
             }
             
             // Apply to all materials with "Image" in their name
@@ -594,8 +681,9 @@ function initializeControls() {
     const updateLightingIntensity = () => {
         const intensity = parseFloat(lightingIntensity?.value || 1);
         
-        if (document.getElementById('lighting-val')) {
-            document.getElementById('lighting-val').textContent = intensity.toFixed(2);
+        // Sync input field with slider
+        if (lightingIntensityInput && parseFloat(lightingIntensityInput.value) !== intensity) {
+            lightingIntensityInput.value = intensity.toFixed(2);
         }
         
         // Update all lights in the scene based on the lighting config
@@ -619,10 +707,79 @@ function initializeControls() {
         }
     };
     
+    // Input field handlers
+    const updateMaterialPropertiesFromInput = () => {
+        if (window.currentModel) {
+            let brightness = parseFloat(materialBrightnessInput.value) || 1;
+            brightness = Math.max(0, Math.min(3, brightness));
+            
+            if (materialBrightness && parseFloat(materialBrightness.value) !== brightness) {
+                materialBrightness.value = brightness;
+            }
+            
+            materialBrightnessInput.value = brightness.toFixed(2);
+            
+            // Apply to materials
+            window.currentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(mat => {
+                        if (mat.name && mat.name.toLowerCase().includes('image')) {
+                            if (!mat.color) {
+                                mat.color = new THREE.Color(1, 1, 1);
+                            }
+                            mat.color.setScalar(brightness);
+                            mat.needsUpdate = true;
+                        }
+                    });
+                }
+            });
+        }
+    };
+    
+    const updateLightingIntensityFromInput = () => {
+        let intensity = parseFloat(lightingIntensityInput.value) || 1;
+        intensity = Math.max(0, Math.min(3, intensity));
+        
+        if (lightingIntensity && parseFloat(lightingIntensity.value) !== intensity) {
+            lightingIntensity.value = intensity;
+        }
+        
+        lightingIntensityInput.value = intensity.toFixed(2);
+        
+        // Update lighting
+        if (window.lightingConfig && window.updateLighting) {
+            if (!window.baseLightIntensities) {
+                window.baseLightIntensities = {
+                    hemisphere: window.lightingConfig.hemisphere.intensity,
+                    mainLight: window.lightingConfig.mainLight.intensity,
+                    fillLight: window.lightingConfig.fillLight.intensity
+                };
+            }
+            
+            window.lightingConfig.hemisphere.intensity = window.baseLightIntensities.hemisphere * intensity;
+            window.lightingConfig.mainLight.intensity = window.baseLightIntensities.mainLight * intensity;
+            window.lightingConfig.fillLight.intensity = window.baseLightIntensities.fillLight * intensity;
+            
+            window.updateLighting();
+        }
+    };
+    
     // Unlit mode toggle
     
+    // Add event listeners for sliders
     if (materialBrightness) materialBrightness.addEventListener('input', updateMaterialProperties);
     if (lightingIntensity) lightingIntensity.addEventListener('input', updateLightingIntensity);
+    
+    // Add event listeners for input fields
+    if (materialBrightnessInput) {
+        materialBrightnessInput.addEventListener('change', updateMaterialPropertiesFromInput);
+        materialBrightnessInput.addEventListener('blur', updateMaterialPropertiesFromInput);
+    }
+    if (lightingIntensityInput) {
+        lightingIntensityInput.addEventListener('change', updateLightingIntensityFromInput);
+        lightingIntensityInput.addEventListener('blur', updateLightingIntensityFromInput);
+    }
     
     // Expose function to apply current settings when a model is loaded
     window.applyCurrentMaterialSettings = () => {
