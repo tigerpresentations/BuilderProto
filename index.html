@@ -14,6 +14,16 @@
         .collapsible-panel { margin-bottom: 12px; border: 1px solid #444; border-radius: 4px; background: rgba(40, 40, 40, 0.6); }
         .panel-header { background: #333; padding: 8px 12px; cursor: pointer; user-select: none; display: flex; justify-content: space-between; align-items: center; border-radius: 3px 3px 0 0; }
         .panel-header:hover { background: #444; }
+        
+        /* Admin Panel Special Styling */
+        .admin-panel { border: 1px solid #8b3535; }
+        .admin-header { 
+            background: linear-gradient(135deg, #4a2525 0%, #3a1818 100%); 
+            border-bottom: 1px solid #8b3535;
+        }
+        .admin-header:hover { 
+            background: linear-gradient(135deg, #5a3030 0%, #4a2020 100%); 
+        }
         .panel-toggle { font-size: 10px; color: #aaa; }
         .panel-content { padding: 10px; }
         .collapsible-panel.collapsed .panel-content { display: none; }
@@ -206,14 +216,7 @@
                     <button id="clear-model-btn" style="display: none;">Clear Model</button>
                 </div>
                 
-                <!-- GLB Model Loading -->
-                <div class="control-group">
-                    <label>Load GLB Model</label>
-                    <div class="file-input-wrapper">
-                        <input type="file" id="glb-file-input" accept=".glb,.gltf" />
-                        <span class="file-input-display">Choose GLB File</span>
-                    </div>
-                </div>
+                <!-- GLB Model Loading - Moved to Admin Panel -->
                 
                 <!-- Canvas Editor Toggle -->
                 <div class="control-group">
@@ -273,15 +276,12 @@
                         <button id="floor-preset-6x6" style="flex: 1; padding: 4px 8px; font-size: 10px;">20×20</button>
                     </div>
                 </div>
-                <div class="control-group">
-                    <label style="margin-bottom: 6px;">
-                        <input type="checkbox" id="grid-toggle" checked> Show Scale Grid
-                    </label>
-                </div>
-                <div class="control-group">
-                    <button id="lighting-dev-btn">Lighting Console</button>
-                    <button id="shadow-dev-btn">Shadow Console</button>
-                </div>
+                <!-- Grid Toggle - Available to all users -->
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 8px; font-size: 11px;">
+                    <input type="checkbox" id="grid-toggle" checked style="margin: 0; vertical-align: middle;">
+                    Show Scale Grid
+                </label>
+                <!-- Developer Console Buttons - Moved to Admin Panel -->
             </div>
         </div>
         
@@ -311,6 +311,51 @@
                             </p>
                             <button id="logoutBtn" style="width: 100%; margin-top: 8px; background: #dc3545; border-color: #dc3545;">Logout</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Admin Panel - Only visible to Admin/Superuser -->
+        <div class="collapsible-panel admin-panel" id="admin-panel" style="display: none;">
+            <div class="panel-header admin-header" data-panel="admin-controls">
+                <span>🔐 Admin Tools</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <!-- GLB Model Loading (Admin Only) -->
+                <div class="control-group">
+                    <label>Load GLB Model</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="glb-file-input" accept=".glb,.gltf" />
+                        <span class="file-input-display">Choose GLB File</span>
+                    </div>
+                </div>
+                
+                <!-- Developer Console Buttons -->
+                <div class="control-group">
+                    <label>Developer Consoles</label>
+                    <button id="lighting-dev-btn" style="width: 49%; margin-right: 2%;">Lighting Console</button>
+                    <button id="shadow-dev-btn" style="width: 49%;">Shadow Console</button>
+                </div>
+                
+                <!-- Performance Controls (Admin Only) -->
+                <div class="control-group">
+                    <label>Performance Override</label>
+                    <select id="admin-quality-override">
+                        <option value="auto">Auto</option>
+                        <option value="1024">Force 1024x1024</option>
+                        <option value="512">Force 512x512</option>
+                        <option value="256">Force 256x256</option>
+                    </select>
+                </div>
+                
+                <!-- User Type Display -->
+                <div class="control-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+                    <label style="color: #ff6b6b;">Admin Status</label>
+                    <div style="font-size: 11px; color: #ccc;">
+                        <div>User Type: <span id="admin-user-type" style="color: #ff6b6b;">-</span></div>
+                        <div>Group: <span id="admin-user-group" style="color: #888;">-</span></div>
                     </div>
                 </div>
             </div>

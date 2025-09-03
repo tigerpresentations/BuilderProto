@@ -891,6 +891,22 @@ function initializeControls() {
         });
     }
     
+    // Admin quality override
+    const adminQualityOverride = document.getElementById('admin-quality-override');
+    if (adminQualityOverride) {
+        adminQualityOverride.addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (value !== 'auto' && window.canvasQualityManager) {
+                const resolution = parseInt(value);
+                window.canvasQualityManager.forceResolution(resolution);
+                showNotification(`Canvas resolution forced to ${resolution}x${resolution}`, 'info', 3000);
+            } else if (value === 'auto' && window.canvasQualityManager) {
+                window.canvasQualityManager.setAutoMode();
+                showNotification('Canvas resolution set to auto', 'info', 3000);
+            }
+        });
+    }
+    
     // Color modal event handlers
     const colorModal = document.getElementById('colorModal');
     if (colorModal) {

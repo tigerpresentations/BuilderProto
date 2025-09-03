@@ -9,6 +9,7 @@ class AuthManager {
         
         this.supabase = null;
         this.currentUser = null;
+        this.userProfile = null;
         
         this.initializeSupabase();
         this.setupEventListeners();
@@ -44,11 +45,24 @@ class AuthManager {
         try {
             const { data: { user } } = await this.supabase.auth.getUser();
             this.currentUser = user;
+            
+            // Fetch user profile with user type if logged in
+            if (user) {
+                await this.fetchUserProfile(user.id);
+            }
+            
             this.updateUI();
             
             // Listen for auth changes
-            this.supabase.auth.onAuthStateChange((event, session) => {
+            this.supabase.auth.onAuthStateChange(async (event, session) => {
                 this.currentUser = session?.user || null;
+                
+                if (this.currentUser) {
+                    await this.fetchUserProfile(this.currentUser.id);
+                } else {
+                    this.userProfile = null;
+                }
+                
                 this.updateUI();
                 
                 if (event === 'SIGNED_IN') {
@@ -97,12 +111,64 @@ class AuthManager {
         }
     }
 
+    async fetchUserProfile(userId) {
+        if (!this.supabase) return;
+        
+        try {
+            const { data, error } = await this.supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+            
+            if (error) {
+                console.error('Error fetching user profile:', error);
+                // Create profile if it doesn't exist
+                if (error.code === 'PGRST116') {
+                    await this.createUserProfile(userId);
+                }
+            } else {
+                this.userProfile = data;
+            }
+        } catch (error) {
+            console.error('Error in fetchUserProfile:', error);
+        }
+    }
+    
+    async createUserProfile(userId) {
+        if (!this.supabase || !this.currentUser) return;
+        
+        try {
+            const { data, error } = await this.supabase
+                .from('user_profiles')
+                .insert({
+                    id: userId,
+                    display_name: this.currentUser.email?.split('@')[0],
+                    user_type: 'User' // Default to User type
+                })
+                .select()
+                .single();
+            
+            if (!error) {
+                this.userProfile = data;
+            }
+        } catch (error) {
+            console.error('Error creating user profile:', error);
+        }
+    }
+    
+    isAdmin() {
+        return this.userProfile?.user_type === 'Admin' || this.userProfile?.user_type === 'Superuser';
+    }
+    
     async handleLogout() {
         if (!this.supabase) return;
 
         try {
             const { error } = await this.supabase.auth.signOut();
             if (error) throw error;
+            
+            this.userProfile = null;
             
         } catch (error) {
             console.error('Logout error:', error);
@@ -124,6 +190,24 @@ class AuthManager {
             userInfo.style.display = 'block';
             
             document.getElementById('userEmail').textContent = this.currentUser.email;
+            
+            // Show/hide admin panel based on user type
+            const adminPanel = document.getElementById('admin-panel');
+            
+            if (adminPanel) {
+                const isAdmin = this.isAdmin();
+                adminPanel.style.display = isAdmin ? 'block' : 'none';
+                
+                // Update admin status display
+                const adminUserType = document.getElementById('admin-user-type');
+                const adminUserGroup = document.getElementById('admin-user-group');
+                if (adminUserType) {
+                    adminUserType.textContent = this.userProfile?.user_type || 'User';
+                }
+                if (adminUserGroup) {
+                    adminUserGroup.textContent = this.userProfile?.company_name || 'No Group';
+                }
+            }
             
             // Update scene status to show logged in state
             const currentStatus = sceneStatus ? sceneStatus.textContent : '';

@@ -312,7 +312,7 @@ function initializeApplication() {
 
 // Setup image tool event handlers
 function setupImageToolEventHandlers() {
-    // GLB file upload
+    // GLB file upload (now in admin panel only)
     const glbFileInput = document.getElementById('glb-file-input');
     if (glbFileInput) {
         glbFileInput.addEventListener('change', handleGLBUpload);
@@ -439,8 +439,33 @@ function setTextureQuality(quality) {
         if (window.uvTextureEditor) {
             window.uvTextureEditor.updateTexture();
         }
+        
+        // Update quality info display
+        const qualityInfo = document.getElementById('quality-info');
+        if (qualityInfo) {
+            qualityInfo.textContent = `Resolution: ${quality}x${quality}`;
+        }
     }
 }
+
+// Canvas Quality Manager for Admin Panel
+window.canvasQualityManager = {
+    forceResolution: function(resolution) {
+        setTextureQuality(resolution);
+        // Store the forced mode
+        this.autoMode = false;
+        this.forcedResolution = resolution;
+    },
+    setAutoMode: function() {
+        this.autoMode = true;
+        this.forcedResolution = null;
+        // Reset to optimal quality based on capabilities
+        const capabilities = window.deviceCapabilities || { optimalQuality: 1024 };
+        setTextureQuality(capabilities.optimalQuality);
+    },
+    autoMode: true,
+    forcedResolution: null
+};
 
 // Simple UV Texture Editor for Three.js integration
 class UVTextureEditor {
