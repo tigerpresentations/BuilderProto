@@ -1,6 +1,6 @@
 // Scene setup variables (exported to window global scope)
 let scene, camera, renderer, controls;
-let hemisphereLight, mainLight, fillLight, floor;
+let hemisphereLight, mainLight, fillLight, floor, gridHelper;
 
 // Scale conversion constants - 1 Three.js unit = 1 foot
 const SCALE = {
@@ -26,30 +26,30 @@ window.lightingConfig = {
     hemisphere: {
         skyColor: 0x87ceeb,
         groundColor: 0x362f28,
-        intensity: 0.4
+        intensity: 0.5  // Balanced ambient lighting to preserve floor color
     },
     mainLight: {
         color: 0xffffff,
-        intensity: 1.2,
+        intensity: 1.8,  // Balanced to maintain visibility while preserving floor darkness
         position: { x: 15, y: 12, z: 10 }, // 15ft away, 12ft high, 10ft side (in feet, converted in setupLighting)
         castShadow: true
     },
     fillLight: {
         color: 0xffffff,
-        intensity: 0.3,
+        intensity: 0.5,  // Increased to provide adequate fill lighting
         position: { x: -8, y: 8, z: -5 }, // 8ft opposite side, 8ft high (in feet, converted in setupLighting)
         castShadow: false
     },
     shadows: {
         mapSize: 2048,
-        cameraSize: 5,
+        cameraSize: 25,      // Increased to cover 25-foot area (appropriate for large booths)
         bias: -0.0005,
         normalBias: 0.02,
         radius: 1,
         blurScale: 1,
         penumbra: 0
     },
-    toneMappingExposure: 1.0
+    toneMappingExposure: 1.0  // Restored to preserve original floor color appearance
 };
 
 function setupScene() {
@@ -103,7 +103,7 @@ function setupRenderer() {
     // Default 10×10 foot trade show booth space
     const floorGeometry = new THREE.BoxGeometry(feetToUnits(10), feetToUnits(0.1), feetToUnits(10));
     const floorMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x333333, // Dark grey default
+        color: 0x222222, // Darker grey default
         roughness: 0.8,
         metalness: 0.1,
         // Performance optimizations
@@ -118,6 +118,9 @@ function setupRenderer() {
     
     // Export floor globally for controls
     window.floor = floor;
+    
+    // Add grid overlay for scale reference
+    setupGridOverlay();
     
     // Handle resize
     window.addEventListener('resize', () => {
@@ -210,6 +213,32 @@ function setupLighting() {
     if (window.scene && window.camera) {
         renderer.render(window.scene, window.camera);
     }
+}
+
+// Setup grid overlay for scale reference
+function setupGridOverlay() {
+    // Create a grid that shows 1-foot increments
+    // Grid size: 30 feet x 30 feet to accommodate large booths
+    const gridSize = feetToUnits(30);      // 30 feet total
+    const gridDivisions = 30;              // 1 foot per division
+    
+    gridHelper = new THREE.GridHelper(
+        gridSize,           // Size of the grid
+        gridDivisions,      // Number of divisions
+        0x666666,          // Center line color (medium grey)
+        0x555555           // Grid line color (darker grey to blend better with floor)
+    );
+    
+    // Position grid just above floor level
+    gridHelper.position.y = feetToUnits(0.01); // 0.12 inches above floor to prevent interference
+    
+    // Initially visible for scale reference
+    gridHelper.visible = true;
+    
+    scene.add(gridHelper);
+    
+    // Export for external control
+    window.gridHelper = gridHelper;
 }
 
 function updateLighting() {

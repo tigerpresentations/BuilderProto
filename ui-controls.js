@@ -668,6 +668,16 @@ function initializeControls() {
         floorPreset6x6.addEventListener('click', () => setFloorPreset(20, 20)); // 20x20 booth
     }
     
+    // Grid toggle control
+    const gridToggle = document.getElementById('grid-toggle');
+    if (gridToggle) {
+        gridToggle.addEventListener('change', (e) => {
+            if (window.gridHelper) {
+                window.gridHelper.visible = e.target.checked;
+            }
+        });
+    }
+    
     // Material controls
     const materialBrightness = document.getElementById('material-brightness');
     const lightingIntensity = document.getElementById('lighting-intensity');
