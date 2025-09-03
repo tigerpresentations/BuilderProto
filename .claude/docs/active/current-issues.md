@@ -1,7 +1,30 @@
 # Current Issues and Problems
 
 ## Active Issues
-*No current active issues as of 2025-09-02*
+
+### Issue: ObjectManipulator Event Handling
+- **Date Identified**: 2025-09-03
+- **Severity**: High  
+- **Component(s) Affected**: object-manipulator.js, integration with ObjectSelector and OrbitControls
+- **Description**: Mouse events are not properly reaching ObjectManipulator when clicking on selected objects or manipulation handles (green rotation ring). Event listeners are correctly attached to renderer domElement with capture phase, but mouse events are not firing.
+- **Steps to Reproduce**:
+  1. Select an object (green outline appears)
+  2. Green rotation ring appears at top of object
+  3. Try to drag object or click green ring
+  4. Object manipulation does not occur (camera moves instead via OrbitControls)
+- **Expected Behavior**: Clicking and dragging selected objects should move them in XZ plane; clicking and dragging green ring should rotate object around Y-axis
+- **Actual Behavior**: Mouse events are captured by OrbitControls, causing camera movement instead of object manipulation
+- **Current Progress**: 
+  - ObjectManipulator system fully implemented with visual helpers
+  - ObjectSelector properly maintains selection when clicking manipulation helpers
+  - Event listeners attached with capture phase and non-passive options
+  - Console logs show "ObjectManipulator event listeners added" but mouse events never fire
+- **Potential Solutions**: 
+  - Investigate event propagation chain more deeply
+  - Try different event attachment strategies (window vs renderer element)
+  - Consider Z-fighting or ray casting priority issues
+  - Review Three.js raycasting integration with manipulation helpers
+- **Status**: In Progress
 
 ## Issue Template
 When documenting issues, use this format:
@@ -74,6 +97,6 @@ When documenting issues, use this format:
 - Link to related code sections when applicable
 
 ---
-**Last Updated**: 2025-09-02 15:45 UTC  
-**Issues Resolved This Session**: 3 (Mouse tracking, Selection contamination, Scaling improvements)  
-**Next Review**: After next development session or when new issues identified
+**Last Updated**: 2025-09-03 12:30 UTC  
+**Issues Active This Session**: 1 (Object manipulation event handling)  
+**Next Review**: After resolving ObjectManipulator event capture

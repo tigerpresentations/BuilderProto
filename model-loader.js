@@ -26,6 +26,14 @@ function placeModelOnFloor(model, scene) {
     }
     
     currentModel = model;
+    
+    console.log('🏗️ Adding model to scene:', {
+        modelName: model.name,
+        modelType: model.type,
+        hasChildren: model.children.length > 0,
+        children: model.children.map(c => ({name: c.name, type: c.type, isMesh: c.isMesh}))
+    });
+    
     scene.add(model);
     
     // Calculate bounding box for placement
@@ -237,8 +245,6 @@ function setupModelControlListeners() {
                 if (backlightToggle) backlightToggle.checked = false;
                 if (status) status.textContent = 'Drop a GLB file to begin';
                 
-                const dropZone = document.getElementById('drop-zone');
-                if (dropZone) dropZone.classList.remove('hidden');
             }
         });
     }
@@ -250,8 +256,6 @@ function loadDefaultGLB(filename, scene) {
         .then(arrayBuffer => {
             loader.parse(arrayBuffer, '', (gltf) => {
                 placeModelOnFloor(gltf.scene, scene);
-                const dropZone = document.getElementById('drop-zone');
-                if (dropZone) dropZone.classList.add('hidden');
             }, (error) => {
                 console.warn('Could not load default GLB:', error);
             });

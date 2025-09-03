@@ -66,14 +66,31 @@ class ObjectSelector {
         
         // Find the loaded model root (should be a direct child of scene)
         this.scene.children.forEach(child => {
-            // Skip floor, lights, and other non-model objects (intentionally non-selectable)
-            if (child === window.floor || child.isLight || child.type === 'HemisphereLight') {
+            console.log('🔍 Checking scene child:', {
+                name: child.name,
+                type: child.type,
+                userData: child.userData,
+                isFloor: child === window.floor,
+                isLight: child.isLight,
+                isManipulationHelper: child.userData?.isManipulationHelper
+            });
+            
+            // Skip floor, lights, manipulation helpers, and other non-model objects
+            if (child === window.floor || 
+                child.isLight || 
+                child.type === 'HemisphereLight' ||
+                child.userData?.isManipulationHelper ||
+                child.userData?.isRotationHandle) {
                 return;
             }
             
-            // If it's a group/model containing meshes, add all its meshes for raycasting
-            // but tag them with their root model for selection
-            if (child.type === 'Group' || child.type === 'Object3D') {
+            // Consider Groups that contain meshes as potential GLB models
+            // This includes the default GLTF "Scene" name
+            const isGLBModel = child.type === 'Group' && 
+                              child.children.some(c => c.isMesh);
+            
+            if (isGLBModel) {
+                console.log('✅ Found GLB model to make selectable:', child.name || 'Unnamed Group');
                 child.traverse((node) => {
                     if (node.isMesh) {
                         // Tag each mesh with its root model
@@ -84,6 +101,7 @@ class ObjectSelector {
                 });
             } else if (child.isMesh) {
                 // Single mesh at root level
+                console.log('✅ Found single mesh to make selectable:', child.name || 'Unnamed Mesh');
                 child.userData.rootModel = child;
                 child.userData.selectable = true;
                 this.selectableObjects.push(child);
@@ -118,8 +136,39 @@ class ObjectSelector {
                 this.selectObject(modelToSelect);
             }
         } else {
-            // Clicked on empty space/background - deselect
-            this.deselectObject();
+            // Check if we clicked on manipulation helpers before deselecting
+            const allSceneObjects = [];
+            this.scene.traverse((obj) => {
+                if (obj.isMesh) {
+                    allSceneObjects.push(obj);
+                }
+            });
+            
+            const allIntersects = this.raycaster.intersectObjects(allSceneObjects, false);
+            const hitManipulationHelper = allIntersects.find(hit => {
+                const obj = hit.object;
+                console.log('🔍 Checking intersection:', {
+                    objectName: obj.name,
+                    isRotationHandle: obj.userData.isRotationHandle,
+                    parentIsManipulationHelper: obj.parent?.userData.isManipulationHelper,
+                    userData: obj.userData
+                });
+                return obj.userData.isRotationHandle || 
+                       obj.parent?.userData.isManipulationHelper;
+            });
+            
+            console.log('🔍 ObjectSelector: No selectable objects hit', {
+                allIntersects: allIntersects.length,
+                hitManipulationHelper: !!hitManipulationHelper
+            });
+            
+            if (!hitManipulationHelper) {
+                // Clicked on empty space/background - deselect
+                console.log('🔍 ObjectSelector: Deselecting (no manipulation helper hit)');
+                this.deselectObject();
+            } else {
+                console.log('🔍 ObjectSelector: Keeping selection (clicked on manipulation helper)');
+            }
         }
     }
     

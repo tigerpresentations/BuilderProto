@@ -6,9 +6,10 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 ## Current State
 
 ### What Works
-- **GLB/GLTF Model Loading**: Drag-and-drop or file picker support for 3D models
+- **GLB/GLTF Model Loading**: File picker support for 3D models (drag-and-drop removed, auto-loads TigerBrite 91x91 from library)
 - **Automatic Material Detection**: Finds and applies textures to materials with "image" in their name
 - **3D Object Selection**: Click-to-select system with visual feedback and UI integration
+- **3D Object Manipulation** *(In Development)*: Visual manipulation system with XZ plane movement and Y-axis rotation controls
 - **Real-Time Canvas-to-Texture Pipeline**: 1024x1024 canvas with adaptive quality fallback (512x512, 256x256)
 - **UV-Based Layer System**: Resolution-independent image layers with drag and resize capabilities
 - **Smooth Scaling System**: Enhanced 8-handle resize with boundary-aware scaling (allows 3x canvas size)
@@ -31,6 +32,7 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 - **Responsive UI**: Collapsible panels with resize handles and dark theme
 
 ### What Doesn't Work / Known Issues
+- **Object Manipulation Event Handling**: ObjectManipulator mouse events not firing properly - event listeners attached but clicks are captured by OrbitControls instead of enabling object movement/rotation
 - **Memory Management**: Large GLB files create large JSON save files due to base64 encoding
 - **Browser Limitations**: File API required for save/load functionality
 - **Performance Constraints**: Browser memory limits may affect very large models
@@ -44,12 +46,13 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 - **glb-scene-editor-1024-backup.html**: Simplified backup version for fallback scenarios
 
 ### Core Modules
-- **main.js**: Application orchestrator with device detection
+- **main.js**: Application orchestrator with device detection and library-based auto-loading
 - **scene-manager.js**: Three.js scene setup and management
 - **model-loader.js**: GLB/GLTF loading and material detection
 - **object-selector.js**: 3D object selection with raycasting and visual feedback
+- **object-manipulator.js**: 3D object manipulation system (XZ movement, Y rotation) - *In Development*
 - **simple-layer-manager.js**: UV-based image layer management
-- **simple-interactive-editor.js**: Mouse interaction handling
+- **simple-interactive-editor.js**: Mouse interaction handling for canvas
 - **model-uploader.js**: GLB upload system with scale inspector
 - **model-library.js**: Model browser and library management
 - **auth.js**: Authentication integration with user types
@@ -99,3 +102,11 @@ The project is in active development with a stable core feature set. The modular
 - Made floor intentionally non-selectable to focus selection on 3D models
 - Fixed floor global export to enable control functionality
 - Improved text input behavior with proper event handling
+- **Object Manipulation System Development**: 
+  - Implemented ObjectManipulator class with XZ plane movement and Y-axis rotation
+  - Added visual manipulation helpers (green rotation ring positioned at object top)
+  - Enhanced ObjectSelector to prevent deselection when clicking manipulation helpers
+  - Modified auto-loading to use TigerBrite 91x91 model from library for proper scaling
+  - Removed "Clear Model" button and drop zone overlay (no longer needed)
+  - Simplified drag-and-drop to handle images only
+  - *Issue*: Mouse events not reaching ObjectManipulator despite proper event listener setup

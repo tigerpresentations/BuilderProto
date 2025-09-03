@@ -1628,9 +1628,6 @@ function setupUploaderAndInspector() {
                     progressElement.textContent = 'Uploading file...';
                 }
 
-                // Hide drop zone
-                const dropZone = document.getElementById('drop-zone');
-                if (dropZone) dropZone.classList.add('hidden');
 
                 // Handle upload and launch inspector
                 await uploaderWorkflow.handleFileUpload(file);

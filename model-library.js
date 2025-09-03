@@ -284,9 +284,6 @@ class ModelLibraryBrowser {
                 window.placeModelOnFloor(loadedModel, window.scene);
             }
 
-            // Hide drop zone
-            const dropZone = document.getElementById('drop-zone');
-            if (dropZone) dropZone.classList.add('hidden');
 
             // Hide library panel
             this.hideLibrary();

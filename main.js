@@ -132,32 +132,15 @@ function animateWithMonitoring() {
     updatePerformanceMonitor();
 }
 
-// Drag and drop for GLB files and images
+// Drag and drop for image files only
 function setupDragAndDrop() {
-    const dropZone = document.getElementById('drop-zone');
-    if (!dropZone) return;
-    
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         document.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); });
     });
     
-    document.addEventListener('dragenter', () => dropZone.classList.add('dragging'));
-    document.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
-    
     document.addEventListener('drop', (e) => {
-        dropZone.classList.remove('dragging');
+        // Handle image files only (GLB loading now via library)
         const files = Array.from(e.dataTransfer.files);
-        
-        // Handle GLB files
-        const glbFile = files.find(f => f.name.toLowerCase().endsWith('.glb'));
-        if (glbFile) {
-            dropZone.classList.add('hidden');
-            if (window.loadGLBFile && window.scene) {
-                window.loadGLBFile(glbFile, window.scene);
-            }
-        }
-        
-        // Handle image files
         const imageFiles = files.filter(f => f.type.startsWith('image/'));
         imageFiles.forEach(file => {
             const img = new Image();
@@ -306,12 +289,24 @@ function initializeApplication() {
         initializeShadowConsole();
     }
     
-    // 13. Load default GLB model
-    if (typeof window.loadDefaultGLB === 'function') {
-        window.loadDefaultGLB('91x91_4.glb', scene);
+    // 13. Initialize object manipulation system
+    if (typeof setupObjectManipulation === 'function') {
+        setTimeout(() => {
+            setupObjectManipulation();
+        }, 1000); // Allow object selector to initialize first
     }
     
-    // 14. Setup memory monitoring
+    // 14. Load default model from library (TigerBrite 91x91 with correct scale)
+    setTimeout(() => {
+        if (window.libraryBrowser && window.authManager?.supabase) {
+            loadDefaultLibraryModel();
+        } else if (typeof window.loadDefaultGLB === 'function') {
+            // Fallback to local GLB if library not available
+            window.loadDefaultGLB('91x91_4.glb', scene);
+        }
+    }, 3000); // Wait for library system to initialize
+    
+    // 15. Setup memory monitoring
     if (performance.memory) {
         setInterval(() => {
             const memUsed = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
@@ -486,6 +481,43 @@ class UVTextureEditor {
     
     getTexture() {
         return this.texture;
+    }
+}
+
+// Load default model from library
+async function loadDefaultLibraryModel() {
+    try {
+        console.log('🏠 Loading default model from library...');
+        
+        // Fetch models from library
+        await window.libraryBrowser.library.fetchModels();
+        
+        // Find the TigerBrite 91x91 model
+        const tigerbriteModel = window.libraryBrowser.library.models.find(model => 
+            model.name && model.name.toLowerCase().includes('tigerbrite') && 
+            model.name.toLowerCase().includes('91x91')
+        );
+        
+        if (tigerbriteModel) {
+            console.log('✅ Found TigerBrite 91x91 model, loading...', tigerbriteModel.name);
+            
+            // Set it as selected and load it
+            window.libraryBrowser.selectedModelId = tigerbriteModel.id;
+            await window.libraryBrowser.loadSelectedModel();
+            
+            console.log('✅ Default library model loaded successfully');
+        } else {
+            console.warn('⚠️ TigerBrite 91x91 model not found in library, falling back to local GLB');
+            if (typeof window.loadDefaultGLB === 'function') {
+                window.loadDefaultGLB('91x91_4.glb', window.scene);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Failed to load default library model:', error);
+        // Fallback to local GLB
+        if (typeof window.loadDefaultGLB === 'function') {
+            window.loadDefaultGLB('91x91_4.glb', window.scene);
+        }
     }
 }
 
