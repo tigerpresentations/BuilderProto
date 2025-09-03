@@ -20,8 +20,13 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 - **Enhanced Floor Controls**: Bi-directional sliders/inputs, preset buttons (3×3, 3×6, 6×6), intentionally non-selectable
 - **Unified Control Layout**: Consistent label+input/slider design across Brightness, Lighting Intensity, Rotation Y, and Floor controls
 - **Performance Monitoring**: FPS tracking with automatic quality adjustments
-- **Authentication Integration**: Supabase auth with login/logout functionality
+- **Authentication Integration**: Supabase auth with login/logout functionality and user type system (Admin, Superuser, User, Viewer)
 - **Scene Persistence**: Save/load functionality with JSON serialization
+- **GLB Model Uploader**: Admin-only GLB upload system with Supabase storage integration
+- **Model Inspector Tool**: Interactive scale configuration with real-world dimension input and visual validation
+- **Model Library Browser**: Browse and load models from database with search/filter functionality
+- **Scale System Integration**: 1 Three.js unit = 1 foot convention with automatic scale factor application
+- **Database Integration**: Complete Supabase schema with assets, user profiles, and group permissions
 - **Developer Tools**: Alt+L lighting console, performance metrics display
 - **Responsive UI**: Collapsible panels with resize handles and dark theme
 
@@ -45,16 +50,20 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 - **object-selector.js**: 3D object selection with raycasting and visual feedback
 - **simple-layer-manager.js**: UV-based image layer management
 - **simple-interactive-editor.js**: Mouse interaction handling
-- **auth.js**: Authentication integration
+- **model-uploader.js**: GLB upload system with scale inspector
+- **model-library.js**: Model browser and library management
+- **auth.js**: Authentication integration with user types
 - **ui-controls.js**: UI system with developer console
 
 ## Technical Stack
 - **Three.js r128**: 3D rendering engine
 - **GLTFLoader**: 3D model loading
 - **OrbitControls**: Camera manipulation
-- **Supabase**: Authentication backend
+- **Supabase**: Authentication backend and database with storage buckets
+- **PostgreSQL**: Database with Row Level Security policies
 - **Vanilla JavaScript**: No framework dependencies
 - **HTML5 Canvas**: Texture editing surface
+- **WebGL**: Hardware-accelerated 3D rendering
 
 ## Performance Characteristics
 - Target 60 FPS with automatic quality degradation
@@ -67,10 +76,21 @@ BuilderProto is a Three.js-based 3D texture editing application that enables rea
 The project is in active development with a stable core feature set. The modular architecture allows for easy extension and modification. The UV-based coordinate system ensures resolution independence and cross-device compatibility.
 
 ---
-**Last Updated**: 2025-09-03 (Enhanced Floor and UI Controls)  
+**Last Updated**: 2025-01-09 (GLB Uploader and Model Library System)  
 **Next Review**: Check after major feature additions or architectural changes
 
 ## Recent Updates
+
+**2025-01-09**: 
+- **GLB Uploader System**: Complete admin-only GLB upload workflow with Supabase storage integration
+- **Model Inspector Tool**: Interactive scale configuration with real-world dimension input and visual validation
+- **Model Library Browser**: Browse and load models from database with search/filter in floating panel
+- **Scale System Integration**: Established 1 Three.js unit = 1 foot convention with automatic scale factor application
+- **Database Schema**: Complete Supabase integration with assets table, user profiles, and group permissions
+- **User Type System**: Admin, Superuser, User, Viewer roles with appropriate access controls
+- **Storage Buckets**: Configured Supabase storage for GLB assets and user images with RLS policies
+- **UI Improvements**: Model library as separate floating panel beside controls for better accessibility
+
 **2025-09-03**: 
 - Enhanced floor control system with bi-directional slider/input field synchronization
 - Added floor preset buttons for common dimensions (3×3, 3×6, 6×6) 
