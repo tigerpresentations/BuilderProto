@@ -281,12 +281,14 @@ function initializeApplication() {
         initializeControls();
     }
     
-    // 10.5. Initialize uploader and inspector
+    // 10.5. Initialize uploader and inspector (wait for auth system)
     setTimeout(() => {
         if (typeof setupUploaderAndInspector === 'function') {
             setupUploaderAndInspector();
+        } else {
+            console.warn('setupUploaderAndInspector function not available');
         }
-    }, 1000); // Wait for auth to initialize
+    }, 2000); // Wait longer for auth to fully initialize
     
     // 11. Initialize lighting console if available
     if (typeof initializeLightingConsole === 'function') {

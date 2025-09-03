@@ -248,7 +248,9 @@ let authManager;
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         authManager = new AuthManager();
+        window.authManager = authManager; // Make globally available
     });
 } else {
     authManager = new AuthManager();
+    window.authManager = authManager; // Make globally available
 }

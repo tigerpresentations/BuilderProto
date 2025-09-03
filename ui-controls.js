@@ -1577,14 +1577,32 @@ function initializeLightingConsole() {
 
 // Model Uploader and Inspector Integration
 function setupUploaderAndInspector() {
-    // Check if we have Supabase client (should be available via auth)
+    // Check if we have all required components
     if (!window.authManager || !window.authManager.supabase) {
-        console.warn('Supabase client not available for uploader');
+        console.warn('Auth manager or Supabase client not available. Retrying in 2 seconds...');
+        setTimeout(setupUploaderAndInspector, 2000);
+        return;
+    }
+    
+    if (!window.InspectorWorkflow) {
+        console.warn('InspectorWorkflow class not available. Retrying in 1 second...');
+        setTimeout(setupUploaderAndInspector, 1000);
         return;
     }
 
+    console.log('✅ Initializing uploader and inspector system...');
+    
     // Initialize uploader workflow
-    const uploaderWorkflow = new window.InspectorWorkflow(window.authManager.supabase);
+    let uploaderWorkflow;
+    try {
+        uploaderWorkflow = new window.InspectorWorkflow(window.authManager.supabase);
+        window.uploaderWorkflow = uploaderWorkflow; // Make globally available for debugging
+        
+        console.log('✅ Uploader workflow created successfully');
+    } catch (error) {
+        console.error('❌ Failed to create uploader workflow:', error);
+        return;
+    }
     
     // GLB Upload Input Handler
     const glbUploadInput = document.getElementById('glb-upload-input');
