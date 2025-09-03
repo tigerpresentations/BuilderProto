@@ -281,12 +281,18 @@ function initializeApplication() {
         initializeControls();
     }
     
-    // 10.5. Initialize uploader and inspector (wait for auth system)
+    // 10.5. Initialize uploader, inspector, and model library (wait for auth system)
     setTimeout(() => {
         if (typeof setupUploaderAndInspector === 'function') {
             setupUploaderAndInspector();
         } else {
             console.warn('setupUploaderAndInspector function not available');
+        }
+        
+        if (typeof setupModelLibrary === 'function') {
+            setupModelLibrary();
+        } else {
+            console.warn('setupModelLibrary function not available');
         }
     }, 2000); // Wait longer for auth to fully initialize
     

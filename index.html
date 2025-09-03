@@ -187,6 +187,24 @@
         
         /* Performance Info */
         .performance-info { position: fixed; bottom: 10px; right: 10px; background: rgba(20, 20, 20, 0.9); padding: 8px 12px; border-radius: 4px; font-size: 10px; color: #aaa; z-index: 50; }
+        
+        /* Model Library Styles */
+        .library-model-item { 
+            transition: background-color 0.2s ease; 
+        }
+        .library-model-item:last-child { 
+            border-bottom: none !important; 
+        }
+        .library-model-item.selected {
+            background: #0084ff !important;
+            color: white !important;
+        }
+        .library-model-item:hover {
+            background: #333 !important;
+        }
+        .library-model-item.selected:hover {
+            background: #0066cc !important;
+        }
     </style>
 </head>
 <body>
@@ -218,9 +236,12 @@
                 
                 <!-- GLB Model Loading - Moved to Admin Panel -->
                 
-                <!-- Canvas Editor Toggle -->
+                <!-- Model Library and Canvas Editor -->
                 <div class="control-group">
-                    <button id="toggle-canvas-btn">Toggle Canvas Editor</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="add-model-btn" style="flex: 1; background: #28a745; border-color: #28a745;">+ Add Model</button>
+                        <button id="toggle-canvas-btn" style="flex: 1;">Canvas Editor</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -453,6 +474,51 @@
             </div>
         </div>
         
+        <!-- Model Library Panel -->
+        <div class="collapsible-panel" id="library-panel" style="display: none;">
+            <div class="panel-header" data-panel="library-controls">
+                <span>📚 Model Library</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <!-- Search and Filter -->
+                <div class="control-group">
+                    <label>Search Models</label>
+                    <input type="text" id="library-search" placeholder="Search by name...">
+                </div>
+                
+                <!-- Model List -->
+                <div class="control-group">
+                    <label>Available Models</label>
+                    <div id="library-model-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #555; border-radius: 3px; background: #222;">
+                        <div id="library-loading" style="padding: 20px; text-align: center; color: #666; font-size: 11px;">
+                            Loading models...
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Selected Model Info -->
+                <div class="control-group" id="library-selected-info" style="display: none;">
+                    <label style="color: #0084ff;">Selected Model</label>
+                    <div style="padding: 8px; background: rgba(0,132,255,0.1); border-radius: 3px; font-size: 11px;">
+                        <div><strong id="library-selected-name">-</strong></div>
+                        <div style="color: #ccc; margin-top: 4px;">
+                            <span id="library-selected-dimensions">-</span><br>
+                            <span id="library-selected-materials">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="control-group">
+                    <div style="display: flex; gap: 8px;">
+                        <button id="library-load-model" style="flex: 1; background: #0084ff; border-color: #0084ff;" disabled>Load Model</button>
+                        <button id="library-close" style="flex: 1; background: #6c757d; border-color: #6c757d;">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Status -->
         <div class="control-group">
             <div id="status" style="font-size: 10px; color: #666;">Drop a GLB file to begin</div>
@@ -546,6 +612,7 @@
     <script src="scene-manager.js"></script>
     <script src="model-loader.js"></script>
     <script src="model-uploader.js"></script>
+    <script src="model-library.js"></script>
     <script src="object-selector.js"></script>
     <!-- Simple layer system - works entirely in 512x512 space -->
     <script src="simple-layer-manager.js"></script>
