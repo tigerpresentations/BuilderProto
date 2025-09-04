@@ -2,29 +2,7 @@
 
 ## Active Issues
 
-### Issue: ObjectManipulator Event Handling
-- **Date Identified**: 2025-09-03
-- **Severity**: High  
-- **Component(s) Affected**: object-manipulator.js, integration with ObjectSelector and OrbitControls
-- **Description**: Mouse events are not properly reaching ObjectManipulator when clicking on selected objects or manipulation handles (green rotation ring). Event listeners are correctly attached to renderer domElement with capture phase, but mouse events are not firing.
-- **Steps to Reproduce**:
-  1. Select an object (green outline appears)
-  2. Green rotation ring appears at top of object
-  3. Try to drag object or click green ring
-  4. Object manipulation does not occur (camera moves instead via OrbitControls)
-- **Expected Behavior**: Clicking and dragging selected objects should move them in XZ plane; clicking and dragging green ring should rotate object around Y-axis
-- **Actual Behavior**: Mouse events are captured by OrbitControls, causing camera movement instead of object manipulation
-- **Current Progress**: 
-  - ObjectManipulator system fully implemented with visual helpers
-  - ObjectSelector properly maintains selection when clicking manipulation helpers
-  - Event listeners attached with capture phase and non-passive options
-  - Console logs show "ObjectManipulator event listeners added" but mouse events never fire
-- **Potential Solutions**: 
-  - Investigate event propagation chain more deeply
-  - Try different event attachment strategies (window vs renderer element)
-  - Consider Z-fighting or ray casting priority issues
-  - Review Three.js raycasting integration with manipulation helpers
-- **Status**: In Progress
+*No active issues - all major selection and manipulation problems have been resolved.*
 
 ## Issue Template
 When documenting issues, use this format:
@@ -41,6 +19,33 @@ When documenting issues, use this format:
 - **Status**: Open / In Progress / Resolved
 
 ## Recently Resolved Issues
+
+### Issue: Selection System Event Conflicts (Resolved 2025-09-04)
+- **Date Identified**: 2025-09-04
+- **Severity**: Critical
+- **Component(s) Affected**: Multiple competing mouse event systems
+- **Description**: Multiple selection systems (OptimizedSelectionSystem, CleanSelectionSystem, SimpleInteractiveEditor) were competing for mouse events, preventing selection from working
+- **Solution**: Consolidated to single OptimizedSelectionSystem with Promise-based initialization, removed conflicting CleanSelectionSystem
+- **Status**: Resolved
+
+### Issue: Wireframe Transform Inheritance (Resolved 2025-09-04)  
+- **Date Identified**: 2025-09-04
+- **Severity**: High
+- **Component(s) Affected**: SimpleSelectionVisualization wireframe rendering
+- **Description**: Wireframe visualization didn't inherit GLB transforms (scale) and had Y-axis offsets for meshes with local transforms
+- **Solution**: 
+  - Wireframe added as child of selected object for automatic transform inheritance
+  - Matrix-based relative positioning for meshes with local transforms
+  - Proper coordinate space calculations
+- **Status**: Resolved
+
+### Issue: ObjectManipulator Event Handling (Resolved 2025-09-04)
+- **Date Identified**: 2025-09-03  
+- **Severity**: High
+- **Component(s) Affected**: object-manipulator.js, replaced with Three.js TransformControls
+- **Description**: Mouse events not reaching ObjectManipulator, causing manipulation failures
+- **Solution**: Replaced custom ObjectManipulator with standard Three.js TransformControls integration
+- **Status**: Resolved
 
 ### Issue: Camera Centering Auto-Trigger (Resolved 2025-09-02)
 - **Date Identified**: 2025-09-02  
@@ -97,6 +102,13 @@ When documenting issues, use this format:
 - Link to related code sections when applicable
 
 ---
-**Last Updated**: 2025-09-03 12:30 UTC  
-**Issues Active This Session**: 1 (Object manipulation event handling)  
-**Next Review**: After resolving ObjectManipulator event capture
+**Last Updated**: 2025-09-04 15:30 UTC  
+**Issues Active This Session**: 0 (All resolved)  
+**Next Review**: As needed when new issues arise
+
+## Major System Improvements (2025-09-04)
+- ✅ **Selection system fully modernized** with Three.js native patterns
+- ✅ **Event conflicts resolved** by consolidating to single system
+- ✅ **Promise-based initialization** eliminates race conditions
+- ✅ **Wireframe visualization fixed** with proper transform inheritance
+- ✅ **TransformControls integration** working correctly

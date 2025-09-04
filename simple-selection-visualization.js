@@ -96,25 +96,35 @@ class SimpleSelectionVisualization {
                     this.resourceManager.registerMesh(wireframe);
                 }
                 
-                // Match the transform of the original mesh
-                wireframe.position.copy(child.position);
-                wireframe.rotation.copy(child.rotation);
-                wireframe.scale.copy(child.scale);
+                // Get the mesh's transform relative to the selected object (not world)
+                const meshWorldMatrix = new THREE.Matrix4();
+                const objectWorldMatrix = new THREE.Matrix4();
+                const relativeMatrix = new THREE.Matrix4();
                 
-                // Update matrices
                 child.updateMatrixWorld(true);
-                wireframe.matrixWorld.copy(child.matrixWorld);
+                object.updateMatrixWorld(true);
+                
+                meshWorldMatrix.copy(child.matrixWorld);
+                objectWorldMatrix.copy(object.matrixWorld);
+                
+                // Calculate relative transform: mesh transform relative to object
+                relativeMatrix.copy(meshWorldMatrix).premultiply(objectWorldMatrix.invert());
+                
+                // Apply the relative transform to wireframe
+                wireframe.matrix.copy(relativeMatrix);
+                wireframe.matrixAutoUpdate = false;
+                
+                console.log(`🔧 Wireframe for ${child.name || 'mesh'}: relative transform applied`);
                 
                 this.selectionHelper.add(wireframe);
             }
         });
         
-        // Match the parent object's transform
-        object.updateMatrixWorld(true);
-        this.selectionHelper.matrixWorld.copy(object.matrixWorld);
+        // CRITICAL: Add wireframe as child of the selected object
+        // This ensures it automatically inherits all transformations
+        object.add(this.selectionHelper);
         
-        // Add to scene
-        this.scene.add(this.selectionHelper);
+        console.log('✅ Wireframe added as child of selected object - will follow all transforms');
     }
     
     // Alternative: Create bounding box visualization
@@ -162,17 +172,17 @@ class SimpleSelectionVisualization {
     
     // Clear selection visualization
     clearSelection() {
-        if (this.selectionHelper) {
-            // Use resource manager if available, otherwise manual cleanup
+        if (this.selectionHelper && this.selectedObject) {
+            // Remove wireframe from its parent object
+            if (this.selectionHelper.parent) {
+                this.selectionHelper.parent.remove(this.selectionHelper);
+            }
+            
+            // Clean up resources
             if (this.resourceManager && this.resourceManager.disposeGroup) {
-                if (this.selectionHelper.isGroup) {
-                    this.resourceManager.disposeGroup(this.selectionHelper);
-                } else {
-                    this.resourceManager.disposeMesh(this.selectionHelper);
-                }
+                this.resourceManager.disposeGroup(this.selectionHelper);
             } else {
                 // Manual cleanup fallback
-                this.scene.remove(this.selectionHelper);
                 this.selectionHelper.traverse((child) => {
                     if (child.geometry) child.geometry.dispose();
                 });
@@ -189,12 +199,13 @@ class SimpleSelectionVisualization {
         this.selectedObject = null;
     }
     
-    // Update selection if object moves
+    // Update selection if object moves (not needed anymore since wireframe is a child)
     updateSelection() {
+        // Since wireframe is now a child of the selected object,
+        // it automatically inherits all transforms - no manual update needed
         if (this.selectedObject && this.selectionHelper) {
-            // Update helper position to match object
+            // Force matrix updates to ensure wireframe follows immediately
             this.selectedObject.updateMatrixWorld(true);
-            this.selectionHelper.matrixWorld.copy(this.selectedObject.matrixWorld);
         }
     }
     
