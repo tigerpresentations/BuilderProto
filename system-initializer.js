@@ -143,7 +143,7 @@ class SystemInitializer {
                 () => window.optimizedSelectionSystem
             );
             
-            // Setup object-selected listener
+            // Setup object-selected listener (multi-selection support)
             selectionSystem.addEventListener('object-selected', (event) => {
                 const selectionInfo = document.getElementById('selection-info');
                 const selectedName = document.getElementById('selected-name');
@@ -152,15 +152,36 @@ class SystemInitializer {
                 
                 if (selectionInfo && selectedName && selectedUuid && selectedPosition) {
                     selectionInfo.style.display = 'block';
-                    selectedName.textContent = event.object.name || 'Unnamed';
-                    selectedUuid.textContent = event.object.uuid.substring(0, 8) + '...';
-                    const pos = event.object.position;
+                    
+                    // Show primary selection info with count
+                    const count = event.selectedObjects ? event.selectedObjects.length : 1;
+                    const primary = event.primarySelection || event.object;
+                    
+                    if (count > 1) {
+                        selectedName.textContent = `${primary.name || 'Unnamed'} (+${count-1} more)`;
+                    } else {
+                        selectedName.textContent = primary.name || 'Unnamed';
+                    }
+                    
+                    selectedUuid.textContent = primary.uuid.substring(0, 8) + '...';
+                    const pos = primary.position;
                     selectedPosition.textContent = `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
                 }
             });
             
             // Setup object-deselected listener
-            selectionSystem.addEventListener('object-deselected', () => {
+            selectionSystem.addEventListener('object-deselected', (event) => {
+                // Only hide UI if no objects remain selected
+                if (event.selectedObjects && event.selectedObjects.length === 0) {
+                    const selectionInfo = document.getElementById('selection-info');
+                    if (selectionInfo) {
+                        selectionInfo.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Setup selection-cleared listener for complete deselection
+            selectionSystem.addEventListener('selection-cleared', () => {
                 const selectionInfo = document.getElementById('selection-info');
                 if (selectionInfo) {
                     selectionInfo.style.display = 'none';

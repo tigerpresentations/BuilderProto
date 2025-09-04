@@ -77,11 +77,11 @@ class TransformControlsManager {
                 key: event.key,
                 target: event.target.tagName,
                 selectedObject: !!this.selectedObject,
-                hasGlobalSelection: !!window.optimizedSelectionSystem?.selectedObject
+                hasGlobalSelection: !!window.optimizedSelectionSystem?.primarySelection
             });
             
             // Check if we have a selection (either local or global)
-            const hasSelection = this.selectedObject || window.optimizedSelectionSystem?.selectedObject;
+            const hasSelection = this.selectedObject || window.optimizedSelectionSystem?.primarySelection;
             if (!hasSelection) {
                 console.log('🎹 No selection - skipping keyboard shortcut');
                 return;

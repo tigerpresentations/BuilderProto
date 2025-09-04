@@ -63,8 +63,11 @@ class SimpleSelectionVisualization {
         // Method 1: Simple wireframe overlay
         this.createWireframeOverlay(object);
         
-        // Store reference
-        this.selectedObject = object;
+        // Store reference (support multiple selections)
+        if (!this.selectedObjects) {
+            this.selectedObjects = new Map();
+        }
+        this.selectedObjects.set(object, this.selectionHelper);
     }
     
     // Create a wireframe overlay for selection
@@ -170,33 +173,77 @@ class SimpleSelectionVisualization {
         this.originalMaterials.clear();
     }
     
-    // Clear selection visualization
-    clearSelection() {
-        if (this.selectionHelper && this.selectedObject) {
-            // Remove wireframe from its parent object
-            if (this.selectionHelper.parent) {
-                this.selectionHelper.parent.remove(this.selectionHelper);
+    // Clear selection visualization - supports single object or all
+    clearSelection(specificObject = null) {
+        if (specificObject) {
+            // Clear specific object selection
+            if (this.selectedObjects && this.selectedObjects.has(specificObject)) {
+                const helper = this.selectedObjects.get(specificObject);
+                
+                // Remove wireframe from its parent object
+                if (helper && helper.parent) {
+                    helper.parent.remove(helper);
+                }
+                
+                // Clean up resources
+                if (this.resourceManager && this.resourceManager.disposeGroup) {
+                    this.resourceManager.disposeGroup(helper);
+                } else {
+                    // Manual cleanup fallback
+                    helper.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                    });
+                }
+                
+                this.selectedObjects.delete(specificObject);
+                console.log('✅ Cleared selection visualization for:', specificObject.name);
             }
-            
-            // Clean up resources
-            if (this.resourceManager && this.resourceManager.disposeGroup) {
-                this.resourceManager.disposeGroup(this.selectionHelper);
-            } else {
-                // Manual cleanup fallback
-                this.selectionHelper.traverse((child) => {
-                    if (child.geometry) child.geometry.dispose();
+        } else {
+            // Clear all selections (legacy behavior)
+            if (this.selectedObjects) {
+                // Clear all multi-selections
+                this.selectedObjects.forEach((helper, object) => {
+                    if (helper && helper.parent) {
+                        helper.parent.remove(helper);
+                    }
+                    
+                    if (this.resourceManager && this.resourceManager.disposeGroup) {
+                        this.resourceManager.disposeGroup(helper);
+                    } else {
+                        helper.traverse((child) => {
+                            if (child.geometry) child.geometry.dispose();
+                        });
+                    }
                 });
+                this.selectedObjects.clear();
             }
             
-            this.selectionHelper = null;
+            // Clear legacy single selection
+            if (this.selectionHelper) {
+                if (this.selectionHelper.parent) {
+                    this.selectionHelper.parent.remove(this.selectionHelper);
+                }
+                
+                if (this.resourceManager && this.resourceManager.disposeGroup) {
+                    this.resourceManager.disposeGroup(this.selectionHelper);
+                } else {
+                    this.selectionHelper.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                    });
+                }
+                
+                this.selectionHelper = null;
+            }
+            
+            // Clear material selections if any
+            if (this.originalMaterials.size > 0) {
+                this.clearMaterialSelection();
+            }
+            
+            // Clear legacy reference
+            this.selectedObject = null;
+            console.log('✅ Cleared all selection visualizations');
         }
-        
-        // Clear material selections if any
-        if (this.originalMaterials.size > 0) {
-            this.clearMaterialSelection();
-        }
-        
-        this.selectedObject = null;
     }
     
     // Update selection if object moves (not needed anymore since wireframe is a child)

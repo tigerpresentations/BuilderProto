@@ -12,8 +12,9 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         this.renderer = renderer;
         this.orbitControls = orbitControls;
         
-        // Selection state - single source of truth
-        this.selectedObject = null;
+        // Selection state - supports multiple objects
+        this.selectedObjects = new Set(); // Multiple selected objects
+        this.primarySelection = null; // Primary object for TransformControls
         this.selectableObjects = [];
         
         // Simple selection visualization setup
@@ -61,11 +62,8 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         // Single mouse handler to eliminate conflicts
         this.handleMouseInteraction = this.handleMouseInteraction.bind(this);
         
-        // Use standard pointerdown events
-        this.renderer.domElement.addEventListener('pointerdown', this.handleMouseInteraction, {
-            capture: false,
-            passive: false
-        });
+        // Use standard pointerdown events (Three.js official pattern)
+        this.renderer.domElement.addEventListener('pointerdown', this.handleMouseInteraction, false);
         
         // Keyboard shortcuts - delegate to TransformControls when possible
         this.handleKeyboard = this.handleKeyboard.bind(this);
@@ -75,158 +73,75 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
     }
     
     handleMouseInteraction(event) {
-        console.log('🖱️ Mouse interaction detected:', {
-            button: event.button,
-            target: event.target === this.renderer.domElement ? 'canvas' : 'other',
-            transformControlsDragging: this.transformControls?.dragging,
-            selectableObjectsCount: this.selectableObjects.length
-        });
+        // Standard Three.js selection pattern based on official examples
+        console.log('🖱️ Standard Three.js selection pattern triggered');
         
-        // Prevent deselection when clicking UI elements
-        if (event.target !== this.renderer.domElement) {
-            console.log('🖱️ Click on UI element - ignoring');
+        // Only handle primary pointer events (prevent multi-touch conflicts)
+        if (event.isPrimary === false) return;
+        
+        // Only handle left mouse button
+        if (event.button !== 0) return;
+        
+        // Only handle canvas clicks (ignore UI elements)
+        if (event.target !== this.renderer.domElement) return;
+        
+        // Skip when TransformControls is actively dragging
+        if (this.transformControls?.dragging === true) {
+            console.log('🔧 TransformControls actively dragging - skipping');
             return;
         }
         
-        // Skip right-click and other buttons
-        if (event.button !== 0) {
-            console.log('🖱️ Skipping - not left mouse button');
-            return;
-        }
-        
-        // Skip ALL interaction when TransformControls is active (dragging)
-        if (this.isTransformControlsActive) {
-            console.log('🖱️ Skipping - TransformControls is actively dragging');
-            return;
-        }
-        
-        // Skip if we have a selected object and TransformControls exist (let them handle interaction)
-        if (this.selectedObject && this.transformControls && this.transformControls.visible) {
-            console.log('🖱️ TransformControls available - letting them handle interaction');
-            return;
-        }
-        
-        // Setup raycaster with proper coordinates
+        // Standard Three.js coordinate conversion
         this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         
-        // Force camera matrix update to prevent stale matrices
-        this.camera.updateMatrixWorld(true);
+        // Setup raycaster
         this.raycaster.setFromCamera(this.mouse, this.camera);
         
-        // Single raycast against ALL scene objects, then filter out excluded objects
-        const allIntersects = this.raycaster.intersectObjects(this.scene.children, true);
+        // Raycast against selectable objects only (standard pattern)
+        const intersects = this.raycaster.intersectObjects(this.selectableObjects, true);
         
-        // Filter out objects marked to exclude from raycasting (like grid)
-        const intersects = allIntersects.filter(hit => {
-            return !hit.object.userData.excludeFromRaycast;
+        // Filter out TransformControls gizmo objects
+        const validHits = intersects.filter(hit => 
+            !this.transformControlsObjects.has(hit.object)
+        );
+        
+        // Detect modifier keys for multi-selection
+        const isCtrlHeld = event.ctrlKey || event.metaKey; // Ctrl on Windows/Linux, Cmd on Mac
+        const isShiftHeld = event.shiftKey;
+        
+        console.log('🎯 Selection raycast:', {
+            validHits: validHits.length,
+            firstHit: validHits[0]?.object?.name || 'none',
+            selectedCount: this.selectedObjects.size,
+            primarySelection: this.primarySelection?.name || 'none',
+            modifiers: { ctrl: isCtrlHeld, shift: isShiftHeld }
         });
         
-        // Enhanced debugging for intermittent selection issues
-        console.log('🎯 Detailed click analysis:', {
-            intersectCount: intersects.length,
-            firstHit: intersects[0] ? {
-                objectName: intersects[0].object.name || 'unnamed',
-                objectType: intersects[0].object.type,
-                distance: intersects[0].distance.toFixed(2),
-                hasUserData: !!intersects[0].object.userData,
-                selectableFlag: intersects[0].object.userData?.selectable,
-                parentName: intersects[0].object.parent?.name || 'no parent'
-            } : null,
-            mouseCoords: { x: this.mouse.x.toFixed(3), y: this.mouse.y.toFixed(3) },
-            currentSelection: this.selectedObject?.name || 'none',
-            transformControlsVisible: this.transformControls?.visible || false,
-            sceneChildren: this.scene.children.length,
-            selectableObjectsCount: this.selectableObjects?.length || 0,
-            cameraMatrixValid: this.camera && this.camera.matrixWorldInverse && !isNaN(this.camera.matrixWorldInverse.elements[0]),
-            raycasterReady: this.raycaster && this.raycaster.ray && !isNaN(this.raycaster.ray.origin.x)
-        });
-        
-        // If no intersects but we expect some, debug further
-        if (intersects.length === 0 && this.selectableObjects?.length > 0) {
-            console.log('🚨 Zero intersects but selectables exist - debugging raycaster:');
-            console.log('🔧 Raycaster details:', {
-                origin: `${this.raycaster.ray.origin.x.toFixed(2)}, ${this.raycaster.ray.origin.y.toFixed(2)}, ${this.raycaster.ray.origin.z.toFixed(2)}`,
-                direction: `${this.raycaster.ray.direction.x.toFixed(2)}, ${this.raycaster.ray.direction.y.toFixed(2)}, ${this.raycaster.ray.direction.z.toFixed(2)}`,
-                near: this.raycaster.near,
-                far: this.raycaster.far
-            });
-            console.log('🔧 Scene debug:', {
-                totalChildren: this.scene.children.length,
-                childrenTypes: this.scene.children.map(child => `${child.name || 'unnamed'}(${child.type})`),
-                selectableObjects: this.selectableObjects.map(obj => `${obj.name || 'unnamed'}(${obj.type})`)
-            });
-        }
-        
-        if (intersects.length === 0) {
-            // User clicked on background/empty space
-            if (this.selectedObject) {
-                console.log('🎯 Clicked background - deselecting');
-                this.deselectObject();
-            } else {
-                console.log('🎯 Clicked background - nothing to deselect');
-            }
-            return;
-        }
-        
-        // O(1) TransformControls detection using cached Set
-        const hit = intersects[0].object;
-        
-        if (this.transformControlsObjects.has(hit) && this.selectedObject) {
-            console.log('🎮 Hit TransformControls - ignoring');
-            return; // Let TransformControls work
-        }
-        
-        // Check if we only hit non-selectable infrastructure (treat as background click)
-        const isInfrastructure = !this.isObjectSelectable(hit);
-        
-        if (isInfrastructure && this.selectedObject) {
-            console.log('🎯 Clicked non-selectable infrastructure - deselecting:', {
-                entityName: hit.name || 'unnamed',
-                entityType: hit.type,
-                isLight: hit.isLight,
-                userData: hit.userData,
-                parentName: hit.parent?.name || 'no parent',
-                position: `${hit.position?.x?.toFixed(2) || 'N/A'}, ${hit.position?.y?.toFixed(2) || 'N/A'}, ${hit.position?.z?.toFixed(2) || 'N/A'}`
-            });
-            this.deselectObject();
-            return;
-        }
-        
-        // Check if hit object is selectable
-        const isSelectable = this.isObjectSelectable(hit);
-        console.log('🔍 Selectability check:', {
-            hitObjectName: hit.name || 'unnamed',
-            hitObjectType: hit.type,
-            isSelectable: isSelectable,
-            userDataSelectable: hit.userData?.selectable,
-            parentChain: this.getParentChain(hit),
-            hitPosition: `${hit.position?.x?.toFixed(2) || 'N/A'}, ${hit.position?.y?.toFixed(2) || 'N/A'}, ${hit.position?.z?.toFixed(2) || 'N/A'}`,
-            isLight: hit.isLight,
-            isMesh: hit.isMesh,
-            geometry: hit.geometry?.type || 'no geometry',
-            material: hit.material?.type || 'no material'
-        });
-        
-        if (isSelectable) {
+        if (validHits.length > 0) {
+            // Hit a selectable object - find the top-level selectable parent
+            const hit = validHits[0].object;
             const selectableParent = this.findSelectableParent(hit);
-            console.log('🔍 Found selectable parent:', selectableParent?.name || 'none');
             
-            if (selectableParent && selectableParent !== this.selectedObject) {
-                console.log('🎯 Selecting object:', selectableParent.name);
-                this.selectObject(selectableParent);
-            } else if (selectableParent === this.selectedObject) {
-                console.log('🎯 Same object clicked - no action needed');
-            } else {
-                console.log('⚠️ Object marked selectable but no parent found');
+            if (selectableParent) {
+                if (isCtrlHeld) {
+                    // Ctrl+Click: Add/remove from selection
+                    this.toggleObjectSelection(selectableParent);
+                } else if (isShiftHeld && this.primarySelection) {
+                    // Shift+Click: Select range (if we have selectable objects list)
+                    this.selectRange(this.primarySelection, selectableParent);
+                } else {
+                    // Regular click: Replace selection
+                    this.selectObject(selectableParent, true); // true = replace existing
+                }
             }
         } else {
-            // Hit non-selectable object (like floor)
-            if (this.selectedObject) {
-                console.log('🎯 Hit non-selectable object - deselecting');
-                this.deselectObject();
+            // No valid hits - deselect all (standard Three.js pattern)
+            if (!isCtrlHeld && !isShiftHeld) {
+                console.log('🎯 No valid hits - deselecting all');
+                this.deselectAll();
             } else {
-                console.log('🎯 Hit non-selectable object - nothing to deselect');
+                console.log('🎯 No valid hits with modifier - keeping selection');
             }
         }
     }
@@ -239,18 +154,24 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         
         switch(event.key.toLowerCase()) {
             case 'escape':
-                this.deselectObject();
+                this.deselectAll();
                 event.preventDefault();
                 break;
             case 'delete':
-                if (this.selectedObject && event.key === 'Delete') {
-                    this.deleteSelectedObject();
+                if (this.selectedObjects.size > 0 && event.key === 'Delete') {
+                    this.deleteSelectedObjects();
                     event.preventDefault();
                 }
                 break;
             case 'tab':
                 this.cycleSelection(event.shiftKey ? -1 : 1);
                 event.preventDefault();
+                break;
+            case 'a':
+                if (event.ctrlKey || event.metaKey) {
+                    this.selectAll();
+                    event.preventDefault();
+                }
                 break;
         }
     }
@@ -297,139 +218,257 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         return null;
     }
     
-    // Optimized selection methods
-    selectObject(object) {
-        if (!object || object === this.selectedObject) {
+    // Multi-selection methods
+    selectObject(object, replaceSelection = false) {
+        if (!object) return;
+        
+        if (replaceSelection) {
+            this.deselectAll();
+        }
+        
+        if (this.selectedObjects.has(object)) {
+            console.log('🎯 Object already selected:', object.name);
             return;
         }
         
         console.log('🎯 Selecting object:', object.name);
         
-        // Clear previous selection
-        if (this.selectedObject) {
-            this.deselectObject();
-        }
-        
-        // Set new selection
-        this.selectedObject = object;
+        // Add to selection set
+        this.selectedObjects.add(object);
         object.userData.selected = true;
         
-        // Apply simple selection visualization
-        if (this.selectionVisualization) {
-            this.selectionVisualization.applySelection(object);
-        } else {
-            // Fallback to basic edges
-            this.createEdgesSelection(object);
+        // Set as primary selection (for TransformControls)
+        this.primarySelection = object;
+        
+        // Apply selection visualization
+        this.applySelectionVisualization(object);
+        
+        // Update TransformControls
+        this.updateTransformControls();
+        
+        // Show keyboard shortcuts if first selection
+        if (this.selectedObjects.size === 1) {
+            this.showKeyboardShortcuts();
         }
         
-        // Add TransformControls back to scene and attach
-        if (this.transformControls) {
-            console.log('🔧 Adding TransformControls to scene and attaching');
-            console.log('🔧 TransformControls parent before adding:', this.transformControls.parent?.type || 'no parent');
-            if (this.scene && this.transformControls.parent !== this.scene) {
-                this.scene.add(this.transformControls);
-                console.log('✅ TransformControls added to scene');
-            } else {
-                console.log('⚠️ TransformControls already in scene or no scene reference');
-            }
-            this.transformControls.attach(object);
-        }
+        // Dispatch event
+        this.dispatchEvent({ 
+            type: 'object-selected', 
+            object: object, 
+            selectedObjects: Array.from(this.selectedObjects),
+            primarySelection: this.primarySelection
+        });
         
-        // Show keyboard shortcuts overlay
-        this.showKeyboardShortcuts();
-        
-        // Dispatch Three.js native event
-        this.dispatchEvent({ type: 'object-selected', object: object });
-        
-        console.log('✅ Object selected with simple visualization');
+        console.log(`✅ Object selected (${this.selectedObjects.size} total selected)`);
     }
     
-    deselectObject() {
-        if (!this.selectedObject) {
-            console.log('🎯 Deselect called but no object selected');
+    toggleObjectSelection(object) {
+        if (!object) return;
+        
+        if (this.selectedObjects.has(object)) {
+            this.deselectObject(object);
+        } else {
+            this.selectObject(object, false); // Don't replace selection
+        }
+    }
+    
+    selectRange(startObject, endObject) {
+        if (!startObject || !endObject) return;
+        
+        const startIndex = this.selectableObjects.indexOf(startObject);
+        const endIndex = this.selectableObjects.indexOf(endObject);
+        
+        if (startIndex === -1 || endIndex === -1) {
+            console.warn('⚠️ Range selection failed - objects not in selectable list');
             return;
         }
         
-        console.log('🎯 Deselecting object:', this.selectedObject.name);
+        const minIndex = Math.min(startIndex, endIndex);
+        const maxIndex = Math.max(startIndex, endIndex);
         
-        const object = this.selectedObject;
-        object.userData.selected = false;
+        console.log(`🎯 Selecting range from ${startObject.name} to ${endObject.name}`);
         
-        // Clear selection visualization
-        if (this.selectionVisualization) {
-            console.log('🎨 Clearing simple selection');
-            this.selectionVisualization.clearSelection();
-        } else {
-            console.log('🎨 Removing EdgesGeometry selection');
-            this.removeEdgesSelection(object);
+        // Clear current selection
+        this.deselectAll();
+        
+        // Select all objects in range
+        for (let i = minIndex; i <= maxIndex; i++) {
+            this.selectObject(this.selectableObjects[i], false);
         }
-        
-        // Detach and remove TransformControls from scene
-        if (this.transformControls) {
-            console.log('🔧 Detaching and removing TransformControls from scene');
-            console.log('🔧 TransformControls parent before removal:', this.transformControls.parent?.type || 'no parent');
-            this.transformControls.detach();
-            if (this.scene && this.transformControls.parent === this.scene) {
-                this.scene.remove(this.transformControls);
-                console.log('✅ TransformControls removed from scene');
-            } else {
-                console.log('⚠️ TransformControls not in scene or no scene reference');
-            }
-        } else {
-            console.log('⚠️ No TransformControls to detach');
-        }
-        
-        // Clear selection
-        this.selectedObject = null;
-        
-        // Hide keyboard shortcuts overlay
-        this.hideKeyboardShortcuts();
-        
-        // Dispatch Three.js native event
-        this.dispatchEvent({ type: 'object-deselected', object: object });
-        
-        console.log('✅ Object deselected - controls should be hidden');
     }
     
-    deleteSelectedObject() {
-        if (!this.selectedObject) return;
-        
-        const objectToDelete = this.selectedObject;
-        console.log('🗑️ Deleting selected object:', objectToDelete.name);
-        
-        // Deselect first
-        this.deselectObject();
-        
-        // Remove from scene
-        if (objectToDelete.parent) {
-            objectToDelete.parent.remove(objectToDelete);
+    deselectObject(object) {
+        // If no specific object provided, deselect primary selection
+        if (!object) {
+            object = this.primarySelection;
         }
         
-        // Dispose of resources
-        objectToDelete.traverse((child) => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-                if (Array.isArray(child.material)) {
-                    child.material.forEach(material => material.dispose());
-                } else {
-                    child.material.dispose();
-                }
+        if (!object || !this.selectedObjects.has(object)) {
+            console.log('🎯 Deselect called but object not selected');
+            return;
+        }
+        
+        console.log('🎯 Deselecting object:', object.name);
+        
+        // Remove from selection set
+        this.selectedObjects.delete(object);
+        object.userData.selected = false;
+        
+        // Clear visualization for this object
+        this.clearSelectionVisualization(object);
+        
+        // Update primary selection
+        if (this.primarySelection === object) {
+            // Set new primary selection to first remaining object
+            this.primarySelection = this.selectedObjects.size > 0 
+                ? this.selectedObjects.values().next().value 
+                : null;
+        }
+        
+        // Update TransformControls
+        this.updateTransformControls();
+        
+        // Hide shortcuts if no selection
+        if (this.selectedObjects.size === 0) {
+            this.hideKeyboardShortcuts();
+        }
+        
+        // Dispatch event
+        this.dispatchEvent({ 
+            type: 'object-deselected', 
+            object: object,
+            selectedObjects: Array.from(this.selectedObjects),
+            primarySelection: this.primarySelection
+        });
+        
+        console.log(`✅ Object deselected (${this.selectedObjects.size} remaining selected)`);
+    }
+    
+    deselectAll() {
+        if (this.selectedObjects.size === 0) {
+            console.log('🎯 Deselect all called - no objects selected');
+            return;
+        }
+        
+        console.log(`🎯 Deselecting all objects (${this.selectedObjects.size} selected)`);
+        
+        // Clear all selections
+        const objectsToDeselect = Array.from(this.selectedObjects);
+        
+        objectsToDeselect.forEach(object => {
+            object.userData.selected = false;
+            this.clearSelectionVisualization(object);
+        });
+        
+        // Clear state
+        this.selectedObjects.clear();
+        this.primarySelection = null;
+        
+        // Update TransformControls
+        this.updateTransformControls();
+        
+        // Hide shortcuts
+        this.hideKeyboardShortcuts();
+        
+        // Dispatch event
+        this.dispatchEvent({ 
+            type: 'selection-cleared',
+            deselectedObjects: objectsToDeselect
+        });
+        
+        console.log('✅ All objects deselected');
+    }
+    
+    deleteSelectedObjects() {
+        if (this.selectedObjects.size === 0) return;
+        
+        const objectsToDelete = Array.from(this.selectedObjects);
+        console.log(`🗑️ Deleting ${objectsToDelete.length} selected objects`);
+        
+        // Deselect all first
+        this.deselectAll();
+        
+        // Delete each object
+        objectsToDelete.forEach(object => {
+            // Remove from scene
+            if (object.parent) {
+                object.parent.remove(object);
             }
+            
+            // Dispose of resources
+            object.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(material => material.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            });
         });
         
         // Update selectable objects
         this.updateSelectableObjects();
         
-        // Dispatch Three.js native event
-        this.dispatchEvent({ type: 'object-deleted', object: objectToDelete });
+        // Dispatch event
+        this.dispatchEvent({ 
+            type: 'objects-deleted', 
+            deletedObjects: objectsToDelete 
+        });
+    }
+    
+    selectAll() {
+        console.log('🎯 Selecting all objects');
+        this.selectableObjects.forEach(object => {
+            this.selectObject(object, false);
+        });
+    }
+    
+    // Visualization helper methods
+    applySelectionVisualization(object) {
+        if (this.selectionVisualization) {
+            this.selectionVisualization.applySelection(object);
+        } else {
+            this.createEdgesSelection(object);
+        }
+    }
+    
+    clearSelectionVisualization(object) {
+        if (this.selectionVisualization) {
+            this.selectionVisualization.clearSelection(object);
+        } else {
+            this.removeEdgesSelection(object);
+        }
+    }
+    
+    // TransformControls integration for multi-selection
+    updateTransformControls() {
+        if (!this.transformControls) return;
+        
+        if (this.primarySelection) {
+            // Attach TransformControls to primary selection
+            console.log('🔧 Attaching TransformControls to primary selection:', this.primarySelection.name);
+            if (this.scene && this.transformControls.parent !== this.scene) {
+                this.scene.add(this.transformControls);
+            }
+            this.transformControls.attach(this.primarySelection);
+        } else {
+            // No selection - detach and remove TransformControls
+            console.log('🔧 No primary selection - detaching TransformControls');
+            this.transformControls.detach();
+            if (this.scene && this.transformControls.parent === this.scene) {
+                this.scene.remove(this.transformControls);
+            }
+        }
     }
     
     cycleSelection(direction = 1) {
         if (this.selectableObjects.length === 0) return;
         
         let currentIndex = -1;
-        if (this.selectedObject) {
-            currentIndex = this.selectableObjects.indexOf(this.selectedObject);
+        if (this.primarySelection) {
+            currentIndex = this.selectableObjects.indexOf(this.primarySelection);
         }
         
         let nextIndex = currentIndex + direction;
@@ -439,7 +478,7 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
             nextIndex = this.selectableObjects.length - 1;
         }
         
-        this.selectObject(this.selectableObjects[nextIndex]);
+        this.selectObject(this.selectableObjects[nextIndex], true); // Replace selection
     }
     
     // Connect TransformControls
@@ -455,9 +494,9 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         // Cache all TransformControls gizmo objects for instant lookup
         this.cacheTransformControlsObjects();
         
-        // If we have a selected object, attach it
-        if (this.selectedObject) {
-            this.transformControls.attach(this.selectedObject);
+        // If we have a primary selection, attach it
+        if (this.primarySelection) {
+            this.transformControls.attach(this.primarySelection);
         }
         
         // Setup TransformControls event handling - CRITICAL for performance and click detection
@@ -633,17 +672,20 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         }
     }
     
-    // Public API methods
-    getSelectedObject() { return this.selectedObject; }
-    isSelected(object) { return this.selectedObject === object; }
-    hasSelection() { return this.selectedObject !== null; }
+    // Public API methods (updated for multi-selection)
+    getSelectedObjects() { return Array.from(this.selectedObjects); }
+    getPrimarySelection() { return this.primarySelection; }
+    getSelectedObject() { return this.primarySelection; } // Legacy compatibility
+    isSelected(object) { return this.selectedObjects.has(object); }
+    hasSelection() { return this.selectedObjects.size > 0; }
+    getSelectionCount() { return this.selectedObjects.size; }
     
     // Cleanup
     dispose() {
         console.log('🗑️ Disposing OptimizedSelectionSystem...');
         
-        // Deselect current object
-        this.deselectObject();
+        // Deselect all objects
+        this.deselectAll();
         
         // Remove event listeners
         this.renderer.domElement.removeEventListener('pointerdown', this.handleMouseInteraction);
