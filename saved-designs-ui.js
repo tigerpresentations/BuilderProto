@@ -305,9 +305,23 @@ class SavedDesignsUI {
         if (!this.savedSceneManager) return;
 
         try {
-            console.log(`Loading scene: ${sceneId}`);
-            // TODO: Implement scene loading when the full system is ready
-            this.showError('Scene loading not yet implemented - this will be available once the multi-GLB system is complete');
+            console.log(`🔄 Loading scene from UI: ${sceneId}`);
+            
+            // Show loading state
+            if (window.showNotification) {
+                window.showNotification('🔄 Loading design...', 'info', 2000);
+            }
+            
+            // Call the SavedSceneManager to load the scene
+            const loadedData = await this.savedSceneManager.loadScene(sceneId);
+            
+            // Success notification
+            if (window.showNotification) {
+                window.showNotification(`✅ Loaded "${loadedData.scene.name}"`, 'success', 3000);
+            }
+            
+            console.log('✅ Scene loaded successfully from UI:', loadedData.scene.name);
+            
         } catch (error) {
             console.error('Failed to load scene:', error);
             this.showError(`Failed to load design: ${error.message}`);

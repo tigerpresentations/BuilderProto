@@ -252,6 +252,375 @@ class SavedSceneManager {
     }
 
     /**
+     * Load a complete scene from Supabase
+     * @param {string} sceneId - Scene ID to load
+     * @returns {Object} Loaded scene data
+     */
+    async loadScene(sceneId) {
+        if (!this.user) {
+            throw new Error('User must be authenticated to load scenes');
+        }
+
+        try {
+            console.log(`🔄 Loading scene: ${sceneId}`);
+            const startTime = performance.now();
+
+            // 1. Load scene data from database
+            const { data: sceneData, error: sceneError } = await this.supabase
+                .from('scenes')
+                .select('*')
+                .eq('id', sceneId)
+                .single();
+
+            if (sceneError) {
+                throw new Error(`Failed to load scene: ${sceneError.message}`);
+            }
+
+            console.log('📊 Scene data loaded:', {
+                name: sceneData.name,
+                assetCount: sceneData.asset_count,
+                canvasResolution: sceneData.canvas_resolution
+            });
+
+            // 2. Load scene assets from database
+            const { data: sceneAssets, error: assetsError } = await this.supabase
+                .from('scene_assets')
+                .select('*')
+                .eq('scene_id', sceneId)
+                .order('created_at', { ascending: true });
+
+            if (assetsError) {
+                throw new Error(`Failed to load scene assets: ${assetsError.message}`);
+            }
+
+            console.log(`📦 Loaded ${sceneAssets?.length || 0} scene assets`);
+
+            // 3. Clear current scene - remove ALL user-added models
+            // First use the standard clearAllModels for tracked models
+            if (window.clearAllModels) {
+                window.clearAllModels();
+            }
+            
+            // Then clean up any untracked models (from previous loads that weren't properly registered)
+            const objectsToRemove = [];
+            window.scene.traverse(child => {
+                // Remove any Scene or Group that looks like a loaded model
+                if ((child.type === 'Scene' || child.type === 'Group') && 
+                    child.userData.isMultiModelInstance && 
+                    child !== window.floor) {
+                    objectsToRemove.push(child);
+                }
+            });
+            
+            objectsToRemove.forEach(obj => {
+                console.log(`🗑️ Removing untracked model: ${obj.name}`);
+                // Clean up the object
+                obj.traverse(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(mat => mat.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                });
+                // Remove from scene
+                window.scene.remove(obj);
+            });
+
+            // 4. Deserialize and reconstruct scene
+            const reconstructedScene = await this.reconstructScene(sceneData, sceneAssets);
+
+            // 5. Apply camera and lighting
+            if (sceneData.camera_data) {
+                this.applyCameraData(sceneData.camera_data);
+            }
+
+            if (sceneData.lighting_data) {
+                this.applyLightingData(sceneData.lighting_data);
+            }
+
+            this.currentScene = sceneData;
+            
+            const endTime = performance.now();
+            console.log(`✅ Scene loaded successfully in ${(endTime - startTime).toFixed(2)}ms:`, {
+                id: sceneData.id,
+                name: sceneData.name,
+                objects: sceneData.asset_count
+            });
+
+            // Dispatch load event
+            this.dispatchEvent('scene-loaded', { 
+                scene: sceneData, 
+                assets: sceneAssets,
+                reconstructedScene 
+            });
+
+            return {
+                scene: sceneData,
+                assets: sceneAssets,
+                reconstructedScene
+            };
+
+        } catch (error) {
+            console.error('❌ Scene loading failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Reconstruct Three.js scene from serialized data
+     */
+    async reconstructScene(sceneData, sceneAssets) {
+        console.log('🏗️ Reconstructing scene from serialized data...');
+        
+        const sceneObjects = sceneData.scene_data?.objects || [];
+        const reconstructedObjects = [];
+
+        for (const objectData of sceneObjects) {
+            try {
+                console.log(`🔧 Reconstructing object: ${objectData.name} (${objectData.type})`);
+                
+                // Handle library models (the main type we save)
+                if (objectData.type === 'library_model' && (objectData.libraryAssetId || objectData.modelUrl)) {
+                    // Load the model from the URL
+                    let loadedModel = null;
+                    
+                    if (objectData.modelUrl) {
+                        // Load directly from URL
+                        console.log(`📥 Loading library model from URL: ${objectData.assetName}`);
+                        
+                        // Use the library browser's loader if available
+                        if (window.libraryBrowser && window.libraryBrowser.loadModelFromUrl) {
+                            loadedModel = await window.libraryBrowser.loadModelFromUrl(objectData.modelUrl);
+                        } else {
+                            // Fallback to direct GLTFLoader
+                            const loader = new THREE.GLTFLoader();
+                            const gltf = await new Promise((resolve, reject) => {
+                                loader.load(
+                                    objectData.modelUrl,
+                                    resolve,
+                                    (progress) => console.log('Loading...', progress),
+                                    reject
+                                );
+                            });
+                            loadedModel = gltf.scene;
+                        }
+                        
+                        // Restore model metadata
+                        if (loadedModel) {
+                            loadedModel.userData.assetId = objectData.libraryAssetId;
+                            loadedModel.userData.assetName = objectData.assetName;
+                            loadedModel.userData.instanceId = objectData.instanceId;
+                            loadedModel.userData.isMultiModelInstance = true;
+                            loadedModel.userData.selectable = true;
+                            
+                            // Apply selectable flag to all mesh children (must use same instanceId throughout)
+                            const tempInstanceId = objectData.instanceId || `model_${Date.now()}`;
+                            loadedModel.userData.instanceId = tempInstanceId;
+                            loadedModel.traverse(child => {
+                                if (child.isMesh) {
+                                    child.userData.selectable = true;
+                                    child.userData.parentInstanceId = tempInstanceId;
+                                }
+                            });
+                            
+                            // First, process the model to detect materials with "Image" in the name
+                            if (window.detectImageMaterials) {
+                                window.detectImageMaterials(loadedModel);
+                            }
+                            
+                            // Apply model scale factor FIRST (from library)
+                            if (objectData.modelScaleFactor) {
+                                loadedModel.scale.setScalar(objectData.modelScaleFactor);
+                            }
+                            
+                            // Then apply the saved transform (user modifications)
+                            if (objectData.scale) {
+                                // This is the full scale including any user modifications
+                                loadedModel.scale.set(objectData.scale.x, objectData.scale.y, objectData.scale.z);
+                            }
+                            
+                            // Set position directly - don't use addModelToScene which would reposition
+                            if (objectData.position) {
+                                loadedModel.position.set(objectData.position.x, objectData.position.y, objectData.position.z);
+                            }
+                            
+                            if (objectData.rotation) {
+                                loadedModel.rotation.set(objectData.rotation.x, objectData.rotation.y, objectData.rotation.z);
+                            }
+                            
+                            // Add directly to scene instead of using addModelToScene
+                            // to preserve the exact saved position
+                            window.scene.add(loadedModel);
+                            
+                            console.log(`📦 Added model to scene: ${loadedModel.name} (Type: ${loadedModel.type}, Selectable: ${loadedModel.userData.selectable})`);
+                            
+                            // Manually register with the model tracking system
+                            if (window.sceneModels) {
+                                // Ensure unique instanceId that won't conflict
+                                const finalInstanceId = tempInstanceId.startsWith('model_') ? 
+                                    tempInstanceId : `model_${tempInstanceId}`;
+                                    
+                                const modelData = {
+                                    instanceId: finalInstanceId,
+                                    model: loadedModel,
+                                    name: objectData.assetName || 'Loaded Model',
+                                    assetId: objectData.libraryAssetId,
+                                    addedAt: new Date()
+                                };
+                                window.sceneModels.set(finalInstanceId, modelData);
+                                
+                                // Update the model's instanceId to match
+                                loadedModel.userData.instanceId = finalInstanceId;
+                                
+                                console.log(`✅ Library model reconstructed: ${objectData.assetName} (Instance: ${finalInstanceId})`);
+                                console.log(`📊 Total models tracked: ${window.sceneModels.size}`);
+                            }
+                            
+                            reconstructedObjects.push(loadedModel);
+                        }
+                    }
+                }
+                // Keep backward compatibility for old format
+                else if (objectData.type === 'glb_model' && objectData.assetId) {
+                    console.warn(`⚠️ Old format GLB model found - skipping (no longer supported)`);
+                }
+            } catch (objectError) {
+                console.warn(`⚠️ Failed to reconstruct object ${objectData.name}:`, objectError);
+            }
+        }
+        
+        // Update scene status to reflect loaded models
+        if (window.updateSceneStatus) {
+            window.updateSceneStatus();
+        }
+        
+        // Update selection system after all models are loaded
+        // Add a small delay to ensure everything is fully initialized
+        setTimeout(() => {
+            if (window.optimizedSelectionSystem) {
+                console.log('🔄 Updating selection system after scene load...');
+                window.optimizedSelectionSystem.updateSelectableObjects();
+                
+                // Debug: Check what's in the scene
+                console.log('📊 Scene children after load:', window.scene.children.map(child => ({
+                    name: child.name,
+                    type: child.type,
+                    selectable: child.userData.selectable,
+                    hasChildren: child.children.length > 0
+                })));
+            }
+        }, 100);
+
+        // Restore canvas texture if available
+        if (sceneData.scene_data?.canvasTexture && window.uvTextureEditor) {
+            try {
+                await this.restoreCanvasTexture(sceneData.scene_data.canvasTexture);
+            } catch (textureError) {
+                console.warn('⚠️ Failed to restore canvas texture:', textureError);
+            }
+        }
+
+        return reconstructedObjects;
+    }
+
+    /**
+     * Apply camera data to current camera
+     */
+    applyCameraData(cameraData) {
+        if (!window.camera || !cameraData) return;
+
+        console.log('📷 Applying camera data');
+        
+        if (cameraData.position) {
+            if (Array.isArray(cameraData.position)) {
+                window.camera.position.fromArray(cameraData.position);
+            } else {
+                window.camera.position.set(
+                    cameraData.position.x,
+                    cameraData.position.y,
+                    cameraData.position.z
+                );
+            }
+        }
+
+        if (cameraData.rotation) {
+            if (Array.isArray(cameraData.rotation)) {
+                window.camera.rotation.fromArray(cameraData.rotation);
+            } else {
+                window.camera.rotation.set(
+                    cameraData.rotation.x,
+                    cameraData.rotation.y,
+                    cameraData.rotation.z
+                );
+            }
+        }
+
+        // Update controls target if available
+        if (window.controls && cameraData.target) {
+            if (Array.isArray(cameraData.target)) {
+                window.controls.target.fromArray(cameraData.target);
+            } else {
+                window.controls.target.set(
+                    cameraData.target.x,
+                    cameraData.target.y,
+                    cameraData.target.z
+                );
+            }
+            window.controls.update();
+        }
+    }
+
+    /**
+     * Apply lighting data to scene
+     */
+    applyLightingData(lightingData) {
+        console.log('💡 Applying lighting data');
+        
+        // Apply lighting preset or custom lighting
+        if (lightingData.preset && window.lightingConfig) {
+            // Apply preset lighting if available
+            console.log(`🎨 Applying lighting preset: ${lightingData.preset}`);
+        }
+        
+        // Apply custom light settings if available
+        if (lightingData.lights && window.updateLighting) {
+            // Update individual light settings
+            window.updateLighting();
+        }
+    }
+
+    /**
+     * Restore canvas texture from base64 data
+     */
+    async restoreCanvasTexture(canvasTextureData) {
+        if (!canvasTextureData || !window.uvTextureEditor) return;
+
+        console.log('🎨 Restoring canvas texture');
+        
+        // Create image from base64 data
+        const img = new Image();
+        img.onload = () => {
+            // Draw to canvas editor
+            const canvas = window.uvTextureEditor.getCanvas();
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Update texture
+            if (window.uvTextureEditor.updateTexture) {
+                window.uvTextureEditor.updateTexture();
+            }
+            
+            console.log('✅ Canvas texture restored');
+        };
+        
+        img.src = canvasTextureData;
+    }
+
+    /**
      * Clear user data
      */
     clearUserData() {

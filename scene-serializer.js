@@ -95,11 +95,30 @@ class SceneSerializer {
                 name: object.name || '',
                 type: object.type,
                 visible: object.visible,
-                position: object.position.toArray(),
-                rotation: object.rotation.toArray(),
-                scale: object.scale.toArray(),
+                position: {x: object.position.x, y: object.position.y, z: object.position.z},
+                rotation: {x: object.rotation.x, y: object.rotation.y, z: object.rotation.z},
+                scale: {x: object.scale.x, y: object.scale.y, z: object.scale.z},
                 userData: this.serializeUserData(object.userData)
             };
+
+            // Special handling for GLB models from library
+            if (object.userData.assetId || object.userData.isMultiModelInstance) {
+                serializedObject.type = 'library_model';
+                serializedObject.libraryAssetId = object.userData.assetId; // Library model ID
+                serializedObject.assetName = object.userData.assetName;
+                serializedObject.instanceId = object.userData.instanceId;
+                
+                // Store the model URL if available (from library metadata)
+                if (window.libraryBrowser && window.libraryBrowser.library) {
+                    const libraryModel = window.libraryBrowser.library.getModelById(object.userData.assetId);
+                    if (libraryModel) {
+                        serializedObject.modelUrl = libraryModel.file_url;
+                        serializedObject.modelScaleFactor = libraryModel.model_scale_factor;
+                    }
+                }
+                
+                console.log(`📦 Detected library model: ${object.name} (Library Asset ID: ${object.userData.assetId})`);
+            }
 
             // Serialize object-specific properties
             if (object.isMesh) {
@@ -139,7 +158,7 @@ class SceneSerializer {
      */
     shouldSerializeObject(object) {
         // Skip the scene root itself
-        if (object.type === 'Scene') return false;
+        if (object.type === 'Scene' && !object.userData.isMultiModelInstance) return false;
         
         // Skip objects marked as non-serializable
         if (object.userData.excludeFromSerialization) return false;
@@ -152,6 +171,15 @@ class SceneSerializer {
         
         // Skip Transform Controls
         if (object.userData.isTransformControls || object.name?.includes('TransformControls')) return false;
+        
+        // Skip floor plane
+        if (object.name === 'floor' || object.userData.isFloor) return false;
+        
+        // Skip child objects of multi-model instances (they'll be loaded with their parent)
+        if (object.parent && object.parent.userData.isMultiModelInstance) return false;
+        
+        // Only serialize top-level model instances
+        if (object.userData.isMultiModelInstance) return true;
         
         return this.supportedObjectTypes.includes(object.type);
     }
@@ -288,6 +316,11 @@ class SceneSerializer {
             up: camera.up.toArray(),
             matrixWorldInverse: camera.matrixWorldInverse.toArray()
         };
+        
+        // Save OrbitControls target if available
+        if (window.controls && window.controls.target) {
+            cameraData.target = window.controls.target.toArray();
+        }
 
         if (camera.isPerspectiveCamera) {
             cameraData.fov = camera.fov;

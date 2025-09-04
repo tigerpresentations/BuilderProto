@@ -1,10 +1,108 @@
 // GLB loader and model management
 const loader = new THREE.GLTFLoader();
-let currentModel = null;
+let currentModel = null; // Keep for backwards compatibility
 let imageMaterials = [];
+
+// Multi-model management system
+let sceneModels = new Map(); // Map<instanceId, modelData>
+let nextInstanceId = 1;
+let modelPlacementGrid = {
+    spacing: 3, // 3 feet between models
+    currentRow: 0,
+    currentCol: 0,
+    maxCols: 5  // Max models per row before starting new row
+};
 
 // loadGLBFile removed - models are now loaded exclusively from Supabase library
 
+// New multi-model function - adds models without replacing existing ones
+function addModelToScene(model, scene, options = {}) {
+    const instanceId = `model_${nextInstanceId++}`;
+    
+    console.log('🏗️ Adding model instance to scene:', {
+        instanceId,
+        modelName: model.name,
+        modelType: model.type,
+        totalModels: sceneModels.size + 1
+    });
+    
+    // Set up model metadata
+    model.userData.instanceId = instanceId;
+    model.userData.selectable = true;
+    model.userData.isMultiModelInstance = true;
+    
+    // Apply selectable flag to all mesh children
+    model.traverse(child => {
+        if (child.isMesh) {
+            child.userData.selectable = true;
+            child.userData.parentInstanceId = instanceId;
+        }
+    });
+    
+    // Calculate bounding box for placement
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    
+    // Center model on its base
+    model.position.x = -center.x;
+    model.position.z = -center.z;
+    model.position.y = -box.min.y; // Place on floor
+    
+    // Position model in grid layout to avoid overlapping
+    const gridPosition = calculateGridPosition();
+    model.position.x += gridPosition.x;
+    model.position.z += gridPosition.z;
+    
+    // Add to scene
+    scene.add(model);
+    
+    // Store in model tracking system
+    const modelData = {
+        instanceId,
+        model,
+        name: model.name || 'Unnamed Model',
+        assetId: model.userData.assetId,
+        dimensions: model.userData.dimensions,
+        boundingBox: box,
+        size,
+        gridPosition,
+        addedAt: new Date()
+    };
+    
+    sceneModels.set(instanceId, modelData);
+    
+    // Update selection system
+    if (window.optimizedSelectionSystem) {
+        window.optimizedSelectionSystem.updateSelectableObjects();
+    }
+    
+    // Update scene status
+    updateSceneStatus();
+    
+    console.log(`✅ Model instance added: ${instanceId} (${model.name})`);
+    return instanceId;
+}
+
+// Calculate next available grid position
+function calculateGridPosition() {
+    const spacing = window.feetToUnits ? window.feetToUnits(modelPlacementGrid.spacing) : modelPlacementGrid.spacing;
+    
+    const x = modelPlacementGrid.currentCol * spacing;
+    const z = modelPlacementGrid.currentRow * spacing;
+    
+    // Advance to next grid position
+    modelPlacementGrid.currentCol++;
+    if (modelPlacementGrid.currentCol >= modelPlacementGrid.maxCols) {
+        modelPlacementGrid.currentCol = 0;
+        modelPlacementGrid.currentRow++;
+    }
+    
+    return { x, z };
+}
+
+// Original single-model function - now calls addModelToScene for first model or replaces if preferred
 function placeModelOnFloor(model, scene) {
     if (currentModel) {
         cleanupModel(currentModel);
@@ -147,6 +245,109 @@ function placeModelOnFloor(model, scene) {
     }
 }
 
+// Multi-model management functions
+function removeModelInstance(instanceId) {
+    const modelData = sceneModels.get(instanceId);
+    if (!modelData) {
+        console.warn(`Model instance ${instanceId} not found`);
+        return false;
+    }
+    
+    console.log(`🗑️ Removing model instance: ${instanceId} (${modelData.name})`);
+    
+    // Clean up model
+    cleanupModel(modelData.model);
+    
+    // Remove from scene
+    if (window.scene) {
+        window.scene.remove(modelData.model);
+    }
+    
+    // Remove from tracking
+    sceneModels.delete(instanceId);
+    
+    // Update selection system
+    if (window.optimizedSelectionSystem) {
+        window.optimizedSelectionSystem.updateSelectableObjects();
+    }
+    
+    // Update scene status
+    updateSceneStatus();
+    
+    console.log(`✅ Model instance removed: ${instanceId}`);
+    return true;
+}
+
+function clearAllModels() {
+    console.log(`🧹 Clearing all model instances (${sceneModels.size} models tracked)`);
+    
+    const instanceIds = Array.from(sceneModels.keys());
+    console.log('📋 Models to clear:', instanceIds);
+    instanceIds.forEach(id => removeModelInstance(id));
+    
+    // Reset grid positioning
+    modelPlacementGrid.currentRow = 0;
+    modelPlacementGrid.currentCol = 0;
+    
+    // Clear single model reference
+    if (currentModel) {
+        cleanupModel(currentModel);
+        if (window.scene) {
+            window.scene.remove(currentModel);
+        }
+        currentModel = null;
+    }
+    
+    // Update scene status
+    updateSceneStatus();
+    
+    console.log('✅ All models cleared');
+}
+
+function getModelInstance(instanceId) {
+    return sceneModels.get(instanceId);
+}
+
+function getAllModelInstances() {
+    return Array.from(sceneModels.values());
+}
+
+function getModelInstanceCount() {
+    return sceneModels.size;
+}
+
+function updateSceneStatus() {
+    const statusElement = document.getElementById('status');
+    if (!statusElement) return;
+    
+    const modelCount = sceneModels.size;
+    const currentText = statusElement.textContent;
+    
+    // Only update if we have models or if the current text mentions models
+    if (modelCount > 0) {
+        const modelText = modelCount === 1 ? '1 model loaded' : `${modelCount} models loaded`;
+        
+        // Preserve any authentication info that might be in the status
+        const parts = currentText.split(' • ');
+        const baseText = modelText;
+        const authText = parts.find(part => part.includes('@') || part.includes('✓'));
+        
+        statusElement.textContent = authText ? `${baseText} • ${authText}` : baseText;
+        statusElement.style.color = '#28a745'; // Green for active status
+    } else {
+        // Reset to default if no models
+        const parts = currentText.split(' • ');
+        const authText = parts.find(part => part.includes('@') || part.includes('✓'));
+        
+        if (authText) {
+            statusElement.textContent = `Ready • ${authText}`;
+        } else {
+            statusElement.textContent = 'Ready to load models';
+        }
+        statusElement.style.color = '#666';
+    }
+}
+
 function cleanupModel(model) {
     model.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -234,6 +435,18 @@ window.setupModelControlListeners = setupModelControlListeners;
 window.cleanupModel = cleanupModel;
 window.centerCameraOnModel = centerCameraOnModel;
 window.setupModelDoubleClickHandler = setupModelDoubleClickHandler;
+
+// Export multi-model functions
+window.addModelToScene = addModelToScene;
+window.removeModelInstance = removeModelInstance;
+window.clearAllModels = clearAllModels;
+window.getModelInstance = getModelInstance;
+window.getAllModelInstances = getAllModelInstances;
+window.getModelInstanceCount = getModelInstanceCount;
+window.updateSceneStatus = updateSceneStatus;
+
+// Export the sceneModels Map for direct access when loading saved scenes
+window.sceneModels = sceneModels;
 
 // Smooth camera animation functions
 function centerCameraOnModel(model, boundingBox, size) {

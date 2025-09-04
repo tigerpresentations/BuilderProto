@@ -325,8 +325,16 @@ function setupImageToolEventHandlers() {
     const clearAll = document.getElementById('clear-all');
     if (clearAll) {
         clearAll.addEventListener('click', () => {
-            if (confirm('Clear all images?')) {
+            if (confirm('Clear all images and models from the scene?')) {
+                // Clear all layers
                 window.layerManager.clearLayers();
+                
+                // Clear all models
+                if (window.clearAllModels) {
+                    window.clearAllModels();
+                } else {
+                    console.warn('clearAllModels function not available');
+                }
             }
         });
     }

@@ -545,11 +545,14 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
             const isSelectable = child.userData.selectable !== false;
             
             // Only add objects that contain meshes AND are marked as selectable
-            if (child.type === 'Group' && this.containsMeshes(child) && isSelectable) {
+            // Handle both Group and Scene types (GLB models load as Scene)
+            const isSelectableType = (child.type === 'Group' || child.type === 'Scene');
+            
+            if (isSelectableType && this.containsMeshes(child) && isSelectable) {
                 this.selectableObjects.push(child);
-                console.log(`✅ Added selectable object: ${child.name} (selectable: ${isSelectable})`);
-            } else if (child.type === 'Group' && this.containsMeshes(child) && !isSelectable) {
-                console.log(`⚠️ Skipped non-selectable object: ${child.name} (selectable: ${isSelectable})`);
+                console.log(`✅ Added selectable object: ${child.name} (type: ${child.type}, selectable: ${isSelectable})`);
+            } else if (isSelectableType && this.containsMeshes(child) && !isSelectable) {
+                console.log(`⚠️ Skipped non-selectable object: ${child.name} (type: ${child.type}, selectable: ${isSelectable})`);
             }
         });
         

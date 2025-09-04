@@ -288,9 +288,15 @@ class ModelLibraryBrowser {
                 depth: model.depth_inches
             };
             
-            // Place in scene using existing model placement function
-            if (window.placeModelOnFloor && window.scene) {
+            // Add to scene using multi-model system (supports multiple models)
+            let instanceId = null;
+            if (window.addModelToScene && window.scene) {
+                instanceId = window.addModelToScene(loadedModel, window.scene);
+                console.log(`🎯 Model instance created: ${instanceId}`);
+            } else if (window.placeModelOnFloor && window.scene) {
+                // Fallback to single-model system if multi-model not available
                 window.placeModelOnFloor(loadedModel, window.scene);
+                console.log('⚠️ Using single-model fallback (multi-model system not available)');
             }
 
 
@@ -299,10 +305,14 @@ class ModelLibraryBrowser {
 
             // Success notification
             if (window.showNotification) {
-                window.showNotification(`✅ Loaded ${model.name}`, 'success');
+                const message = instanceId ? 
+                    `✅ Added ${model.name} (${instanceId})` : 
+                    `✅ Loaded ${model.name}`;
+                window.showNotification(message, 'success');
             }
 
-            console.log(`✅ Successfully loaded model: ${model.name}`);
+            const actionText = instanceId ? 'added to scene' : 'loaded';
+            console.log(`✅ Successfully ${actionText}: ${model.name}`);
 
         } catch (error) {
             console.error('Failed to load model:', error);

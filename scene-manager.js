@@ -137,12 +137,15 @@ function setupRenderer() {
         alphaTest: 0
     });
     floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.name = 'floor';
     floor.position.y = -feetToUnits(0.05); // Half the height to sit on ground
     floor.receiveShadow = true;
     floor.castShadow = true;
     
     // Mark floor as non-selectable infrastructure
     floor.userData.selectable = false;
+    floor.userData.isFloor = true;
+    floor.userData.excludeFromSerialization = true;
     
     scene.add(floor);
     
