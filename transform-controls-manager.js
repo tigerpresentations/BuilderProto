@@ -73,23 +73,14 @@ class TransformControlsManager {
     
     setupKeyboardShortcuts() {
         const keyboardHandler = (event) => {
-            console.log('🎹 Keyboard event detected:', {
-                key: event.key,
-                target: event.target.tagName,
-                selectedObject: !!this.selectedObject,
-                hasGlobalSelection: !!window.optimizedSelectionSystem?.primarySelection
-            });
-            
             // Check if we have a selection (either local or global)
             const hasSelection = this.selectedObject || window.optimizedSelectionSystem?.primarySelection;
             if (!hasSelection) {
-                console.log('🎹 No selection - skipping keyboard shortcut');
                 return;
             }
             
             // Prevent shortcuts during text input
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-                console.log('🎹 Input field active - skipping keyboard shortcut');
                 return;
             }
             

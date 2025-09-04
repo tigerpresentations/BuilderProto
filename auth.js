@@ -20,6 +20,9 @@ class AuthManager {
         // Initialize Supabase client
         if (typeof supabase !== 'undefined') {
             this.supabase = supabase.createClient(this.supabaseUrl, this.supabaseKey);
+            // Export to global scope for other modules
+            window.supabase = this.supabase;
+            console.log('✅ Supabase client initialized and exported globally');
         } else {
             console.error('Supabase client not loaded. Make sure to include the Supabase CDN script.');
             return;

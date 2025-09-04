@@ -291,6 +291,11 @@
                         <button id="toggle-canvas-btn" style="flex: 1;">Canvas Editor</button>
                     </div>
                 </div>
+                
+                <!-- Saved Designs -->
+                <div class="control-group">
+                    <button id="toggle-saved-designs-btn" style="width: 100%; background: #6f42c1; border-color: #6f42c1;" onclick="toggleSavedDesigns()">💾 Saved Designs</button>
+                </div>
             </div>
         </div>
         
@@ -591,6 +596,48 @@
         </div>
     </div>
     
+    <!-- Saved Designs Panel -->
+    <div id="saved-designs" class="hidden" style="position: fixed; top: 50px; right: 20px; width: 300px; height: 400px; background: rgba(32, 32, 32, 0.95); border: 1px solid #666; border-radius: 8px; z-index: 1000; display: flex; flex-direction: column;">
+        <div class="ui-resizer vertical" data-panel="saved-designs"></div>
+        
+        <div class="collapsible-panel main-panel">
+            <div class="panel-header" data-panel="saved-designs">
+                <span>Saved Designs</span>
+                <span class="panel-toggle">▼</span>
+            </div>
+            <div class="panel-content">
+                <!-- Save Current Scene -->
+                <div class="control-group">
+                    <label>Save Current Scene</label>
+                    <input type="text" id="scene-name-input" placeholder="Enter design name" style="margin-bottom: 8px;">
+                    <textarea id="scene-description-input" placeholder="Optional description" rows="2" style="margin-bottom: 8px; width: 100%; resize: vertical;"></textarea>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button id="save-scene-btn" style="flex: 1; background: #28a745; border-color: #28a745;">Save Design</button>
+                        <button id="save-scene-loading" style="display: none; flex: 1;" disabled>Saving...</button>
+                    </div>
+                </div>
+                
+                <!-- Saved Scenes List -->
+                <div class="control-group">
+                    <label>Your Saved Designs</label>
+                    <div id="saved-scenes-list" style="max-height: 250px; overflow-y: auto; border: 1px solid #444; border-radius: 4px; padding: 8px;">
+                        <div id="scenes-loading" style="text-align: center; color: #888; padding: 20px;">
+                            Loading your designs...
+                        </div>
+                        <div id="scenes-empty" style="display: none; text-align: center; color: #666; padding: 20px; font-size: 12px;">
+                            No saved designs yet.<br>Save your current scene to get started!
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="control-group">
+                    <button id="refresh-scenes" style="width: 100%; background: #6c757d; border-color: #6c757d;">Refresh List</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Canvas Editor Panel -->
     <div id="canvas-editor">
         <div class="ui-resizer vertical" data-panel="canvas-editor"></div>
@@ -681,6 +728,11 @@
     <script src="simple-layer-manager.js"></script>
     <script src="simple-interactive-editor.js"></script>
     <script src="ui-controls.js"></script>
+    <!-- Scene serialization and saved designs system -->
+    <script src="scene-serializer.js"></script>
+    <script src="asset-manager.js"></script>
+    <script src="saved-scene-manager.js"></script>
+    <script src="saved-designs-ui.js"></script>
     <script src="main.js"></script>
     <script>
         // All initialization is now handled by main.js
