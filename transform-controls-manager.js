@@ -15,8 +15,7 @@ class TransformControlsManager {
         // Configure for XZ-plane movement (disable Y-axis)
         this.setupTransformControls();
         
-        // Add to scene
-        scene.add(this.transformControls);
+        // Don't add to scene initially - will be added only when selecting objects
         
         // Setup OrbitControls integration
         this.setupOrbitControlsIntegration();
@@ -27,9 +26,7 @@ class TransformControlsManager {
         // Currently selected object
         this.selectedObject = null;
         
-        // Listen for object selection events
-        window.addEventListener('objectSelected', this.onObjectSelected.bind(this));
-        window.addEventListener('objectDeselected', this.onObjectDeselected.bind(this));
+        // Will be connected to SelectionManager events after SelectionManager is initialized
         
         // Store reference globally
         window.transformControlsManager = this;
@@ -47,7 +44,7 @@ class TransformControlsManager {
         this.transformControls.showZ = true;  // Allow Z-axis movement
         
         // Visual settings
-        this.transformControls.setSize(1.5); // Make handles larger for easier clicking
+        this.transformControls.setSize(1.2); // Reasonable size for precise interaction
         
         console.log('🎮 TransformControls configured for XZ-plane movement');
     }
@@ -75,12 +72,24 @@ class TransformControlsManager {
     }
     
     setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (event) => {
-            // Only process shortcuts when an object is selected
-            if (!this.selectedObject) return;
+        const keyboardHandler = (event) => {
+            console.log('🎹 Keyboard event detected:', {
+                key: event.key,
+                target: event.target.tagName,
+                selectedObject: !!this.selectedObject,
+                hasGlobalSelection: !!window.optimizedSelectionSystem?.selectedObject
+            });
+            
+            // Check if we have a selection (either local or global)
+            const hasSelection = this.selectedObject || window.optimizedSelectionSystem?.selectedObject;
+            if (!hasSelection) {
+                console.log('🎹 No selection - skipping keyboard shortcut');
+                return;
+            }
             
             // Prevent shortcuts during text input
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                console.log('🎹 Input field active - skipping keyboard shortcut');
                 return;
             }
             
@@ -100,8 +109,10 @@ class TransformControlsManager {
                     this.transformControls.showX = false;
                     this.transformControls.showY = true;
                     this.transformControls.showZ = false;
+                    // Force update the controls to show rotation handles
+                    this.transformControls.updateMatrixWorld();
                     modeChanged = true;
-                    console.log('🎮 Switched to ROTATE mode (R key)');
+                    console.log('🎮 Switched to ROTATE mode (R key) - Y-axis only');
                     break;
                     
                 case 's': // Scale (optional)
@@ -114,9 +125,11 @@ class TransformControlsManager {
                     console.log('🎮 Switched to SCALE mode (S key)');
                     break;
                     
-                case 'escape': // Deselect
-                    this.deselectObject();
-                    console.log('🎮 Object deselected (Escape key)');
+                case 'escape': // Deselect - delegate to OptimizedSelectionSystem
+                    if (window.optimizedSelectionSystem) {
+                        window.optimizedSelectionSystem.deselectObject();
+                        console.log('🎮 Object deselected via OptimizedSelectionSystem (Escape key)');
+                    }
                     break;
             }
             
@@ -130,59 +143,52 @@ class TransformControlsManager {
                     this.transformControls.showZ = true;
                 }
             }
-        });
+        };
+        
+        document.addEventListener('keydown', keyboardHandler);
         
         console.log('⌨️ Keyboard shortcuts enabled: G (move), R (rotate), S (scale), ESC (deselect)');
     }
     
-    onObjectSelected(event) {
-        const object = event.detail.object;
+    onObjectSelected(data) {
+        const object = data.object;
         console.log('🎯 TransformControlsManager: Object selected', object.name);
         
         this.selectedObject = object;
         
-        // Attach TransformControls to the selected object
-        this.transformControls.attach(object);
-        
-        // Reset to translate mode when selecting a new object
+        // Note: TransformControls is already attached by SelectionManager
+        // Just reset to translate mode when selecting a new object
         this.transformControls.setMode('translate');
         this.transformControls.showX = true;
         this.transformControls.showY = false; // Keep objects on ground
         this.transformControls.showZ = true;
         
-        console.log('✅ TransformControls attached to object');
+        console.log('✅ TransformControls mode reset for new selection');
     }
     
-    onObjectDeselected(event) {
+    onObjectDeselected(data) {
         console.log('🎯 TransformControlsManager: Object deselected');
         
         this.selectedObject = null;
         
-        // Detach TransformControls
-        this.transformControls.detach();
-        
-        console.log('✅ TransformControls detached');
+        // Note: TransformControls is already detached by SelectionManager
+        console.log('✅ TransformControls selection cleared');
     }
     
-    // Public method for manual object selection
+    // Selection is now handled by SelectionManager
+    // These methods are kept for backwards compatibility but delegate to SelectionManager
     selectObject(object) {
-        if (object) {
-            this.selectedObject = object;
-            this.transformControls.attach(object);
-            console.log('✅ Manually selected object for transformation:', object.name);
+        console.log('🔄 TransformControlsManager.selectObject() - delegating to SelectionManager');
+        if (window.selectionManager && object) {
+            window.selectionManager.select(object);
         }
     }
     
-    // Public method for deselection
     deselectObject() {
-        this.selectedObject = null;
-        this.transformControls.detach();
-        
-        // Fire deselection event for other systems
-        const event = new CustomEvent('objectDeselected', {
-            detail: { source: 'TransformControlsManager' }
-        });
-        window.dispatchEvent(event);
+        console.log('🔄 TransformControlsManager.deselectObject() - delegating to SelectionManager');
+        if (window.selectionManager) {
+            window.selectionManager.deselect();
+        }
     }
     
     // Get current manipulation mode
@@ -210,7 +216,10 @@ class TransformControlsManager {
                 this.transformControls.showZ = true;
             }
             
-            console.log(`🎮 Mode set to: ${mode.toUpperCase()}`);
+            // Force update the controls display
+            this.transformControls.updateMatrixWorld();
+            
+            console.log(`🎮 Mode set to: ${mode.toUpperCase()} - handles should be visible`);
         }
     }
     
@@ -221,9 +230,7 @@ class TransformControlsManager {
             this.transformControls.parent.remove(this.transformControls);
         }
         
-        // Remove event listeners
-        window.removeEventListener('objectSelected', this.onObjectSelected);
-        window.removeEventListener('objectDeselected', this.onObjectDeselected);
+        // Event listeners are now managed by SelectionManager connection
         
         // Dispose of TransformControls
         this.transformControls.dispose();
@@ -250,6 +257,12 @@ function setupTransformControls() {
             window.renderer, 
             window.controls
         );
+        
+        // Connect to OptimizedSelectionSystem if available
+        if (window.optimizedSelectionSystem) {
+            window.optimizedSelectionSystem.connectTransformControls(transformManager.transformControls);
+            console.log('🔗 Connected TransformControls to OptimizedSelectionSystem');
+        }
         
         console.log('✅ TransformControls system initialized successfully');
         return transformManager;

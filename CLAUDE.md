@@ -38,34 +38,53 @@ The application uses a modular architecture with window globals for cross-module
    - OrbitControls integration
    - Renderer optimization with pixel ratio clamping
    - Shadow mapping for realistic rendering
+   - Grid overlay system with raycast exclusion
 
 3. **model-loader.js** - GLB/GLTF loading system
    - Automatic material detection with UUID-based deduplication
    - Proper geometry and material disposal
    - Support for both single materials and material arrays
+   - Library-based model loading integration
 
-4. **simple-layer-manager.js** - UV-based layer system
+4. **optimized-selection-system.js** - Modern selection and manipulation system
+   - GPU-based OutlinePass selection visualization
+   - Set-based TransformControls detection for performance
+   - Proper event coordination with Three.js TransformControls
+   - Background deselection logic
+
+5. **transform-controls-manager.js** - Three.js TransformControls integration
+   - XZ-plane constrained movement (Y-axis disabled)
+   - Keyboard shortcuts (G/R/S/ESC)
+   - OrbitControls coordination during manipulation
+   - Mode switching and visual configuration
+
+6. **model-library.js** - Supabase model library browser
+   - Database model fetching and caching
+   - Search and filtering functionality
+   - Model metadata display and loading
+
+7. **simple-layer-manager.js** - UV-based layer system
    - ImageLayer class with resolution-independent positioning
    - Hit testing for selection
    - Z-order management
    - Efficient compositing to canvas
 
-5. **simple-interactive-editor.js** - Mouse interaction handler
+8. **simple-interactive-editor.js** - Mouse interaction handler
    - Drag and resize operations
    - 8-handle resize system (corners + edges)
    - Cursor state management
    - Event coordination
 
-6. **ui-controls.js** - User interface system
+9. **ui-controls.js** - User interface system
    - Collapsible panels with resize handles
    - Developer lighting console with presets (Studio, Outdoor, Soft, Dramatic)
    - File upload handlers
    - Real-time value displays
 
-7. **auth.js** - Authentication integration
-   - Supabase email/password authentication
-   - Session management
-   - Login/logout functionality
+10. **auth.js** - Authentication integration
+    - Supabase email/password authentication
+    - Session management
+    - Login/logout functionality
 
 ## Key Technical Details
 
@@ -132,11 +151,15 @@ BuilderProto/
 ├── main.js                       # Application orchestrator
 ├── scene-manager.js              # Three.js scene setup
 ├── model-loader.js               # GLB/GLTF loading
+├── model-library.js              # Supabase model library browser
+├── optimized-selection-system.js # Modern selection and manipulation
+├── transform-controls-manager.js # Three.js TransformControls integration
 ├── simple-layer-manager.js       # UV-based layer system
 ├── simple-interactive-editor.js  # Mouse interactions
 ├── ui-controls.js                # UI components
 ├── auth.js                       # Supabase authentication
 ├── .claude/docs/                 # Project documentation
+│   ├── active/                   # Active development docs
 │   ├── project_overview.md
 │   ├── file-relationships.md
 │   └── current-issues.md

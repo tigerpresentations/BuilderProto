@@ -44,6 +44,12 @@ class ModelLibrary {
 
         } catch (error) {
             console.error('Failed to fetch models:', error);
+            console.error('Error details:', {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint
+            });
             throw error;
         }
     }
@@ -270,7 +276,10 @@ class ModelLibraryBrowser {
                 loadedModel.scale.setScalar(model.model_scale_factor);
             }
 
-            // Store model metadata
+            // Store model metadata globally for placeModelOnFloor to access
+            window.currentAssetMetadata = model;
+            
+            // Store model metadata on the loaded model
             loadedModel.userData.assetId = model.id;
             loadedModel.userData.assetName = model.name;
             loadedModel.userData.dimensions = {

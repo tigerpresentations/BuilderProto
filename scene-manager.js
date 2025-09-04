@@ -114,6 +114,10 @@ function setupRenderer() {
     floor.position.y = -feetToUnits(0.05); // Half the height to sit on ground
     floor.receiveShadow = true;
     floor.castShadow = true;
+    
+    // Mark floor as non-selectable infrastructure
+    floor.userData.selectable = false;
+    
     scene.add(floor);
     
     // Export floor globally for controls
@@ -141,6 +145,7 @@ function setupLighting() {
         config.hemisphere.groundColor, 
         config.hemisphere.intensity
     );
+    hemisphereLight.userData.selectable = false; // Non-selectable infrastructure
     scene.add(hemisphereLight);
     
     // Main directional light (key light)
@@ -176,6 +181,7 @@ function setupLighting() {
     // Update shadow camera projection matrix - this fixes the dark box issue
     mainLight.shadow.camera.updateProjectionMatrix();
     
+    mainLight.userData.selectable = false; // Non-selectable infrastructure
     scene.add(mainLight);
     
     // Fill light for softer shadows and better contrast
@@ -192,6 +198,7 @@ function setupLighting() {
         fillLight.shadow.radius = config.shadows.radius * config.shadows.blurScale;
         fillLight.penumbra = config.shadows.penumbra;
     }
+    fillLight.userData.selectable = false; // Non-selectable infrastructure
     scene.add(fillLight);
     
     // Update tone mapping exposure
@@ -234,6 +241,10 @@ function setupGridOverlay() {
     
     // Initially visible for scale reference
     gridHelper.visible = true;
+    
+    // Mark grid as non-selectable infrastructure and exclude from raycasting
+    gridHelper.userData.selectable = false;
+    gridHelper.userData.excludeFromRaycast = true; // Prevent raycast interference
     
     scene.add(gridHelper);
     

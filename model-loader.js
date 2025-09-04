@@ -3,21 +3,7 @@ const loader = new THREE.GLTFLoader();
 let currentModel = null;
 let imageMaterials = [];
 
-function loadGLBFile(file, scene) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        loader.parse(e.target.result, '', (gltf) => {
-            placeModelOnFloor(gltf.scene, scene);
-        }, (error) => {
-            console.error('Error loading GLB:', error);
-            const status = document.getElementById('status');
-            if (status) {
-                status.textContent = 'Error loading GLB file';
-            }
-        });
-    };
-    reader.readAsArrayBuffer(file);
-}
+// loadGLBFile removed - models are now loaded exclusively from Supabase library
 
 function placeModelOnFloor(model, scene) {
     if (currentModel) {
@@ -36,6 +22,23 @@ function placeModelOnFloor(model, scene) {
     
     scene.add(model);
     
+    // All models from library are user-selectable
+    const isSelectable = true;
+    model.userData.selectable = isSelectable;
+    
+    // Apply selectable flag to all mesh children for consistency
+    model.traverse(child => {
+        if (child.isMesh) {
+            child.userData.selectable = isSelectable;
+        }
+    });
+    
+    console.log(`🎯 Model selectability set to: ${isSelectable}`, {
+        modelName: model.name,
+        fromMetadata: window.currentAssetMetadata?.is_selectable,
+        applied: isSelectable
+    });
+    
     // Calculate bounding box for placement
     model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
@@ -47,12 +50,7 @@ function placeModelOnFloor(model, scene) {
     model.position.z = -center.z;
     model.position.y = -box.min.y;
     
-    // Auto-scale if too large
-    const maxDimension = Math.max(size.x, size.y, size.z);
-    if (maxDimension > 8) {
-        const scale = 8 / maxDimension;
-        model.scale.setScalar(scale);
-    }
+    // Note: No auto-scaling - models use their database-specified scale factors
     
     // Find and apply textures to "Image" materials using Three.js patterns
     imageMaterials = [];
@@ -143,9 +141,9 @@ function placeModelOnFloor(model, scene) {
         window.controls.update();
     }
     
-    // Update selectable objects for the object selector
-    if (window.objectSelector) {
-        window.objectSelector.updateSelectableObjects();
+    // Update selectable objects for the optimized selection system
+    if (window.optimizedSelectionSystem) {
+        window.optimizedSelectionSystem.updateSelectableObjects();
     }
 }
 
@@ -225,27 +223,14 @@ function setupModelControlListeners() {
     
 }
 
-function loadDefaultGLB(filename, scene) {
-    fetch(filename)
-        .then(response => response.arrayBuffer())
-        .then(arrayBuffer => {
-            loader.parse(arrayBuffer, '', (gltf) => {
-                placeModelOnFloor(gltf.scene, scene);
-            }, (error) => {
-                console.warn('Could not load default GLB:', error);
-            });
-        })
-        .catch(error => {
-            console.warn('Default GLB file not found:', error);
-        });
-}
+// loadDefaultGLB removed - models are now loaded exclusively from Supabase library
 
 // Export functions and variables
-window.loadGLBFile = loadGLBFile;
+// window.loadGLBFile removed - using library-based loading only
 window.placeModelOnFloor = placeModelOnFloor;
 window.updateModelControls = updateModelControls;
 window.setupModelControlListeners = setupModelControlListeners;
-window.loadDefaultGLB = loadDefaultGLB;
+// window.loadDefaultGLB removed - using library-based loading only
 window.cleanupModel = cleanupModel;
 window.centerCameraOnModel = centerCameraOnModel;
 window.setupModelDoubleClickHandler = setupModelDoubleClickHandler;

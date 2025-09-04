@@ -60,6 +60,37 @@
         #canvas-editor { position: fixed; top: 10px; right: 10px; background: rgba(20, 20, 20, 0.95); border: 1px solid #333; border-radius: 6px; width: 450px; max-height: calc(100vh - 40px); overflow-y: auto; z-index: 100; backdrop-filter: blur(10px); transition: width 0.3s ease; }
         #canvas-editor.panel-collapsed { width: auto; max-width: 200px; }
         
+        /* Keyboard Shortcuts Overlay */
+        #keyboard-shortcuts-overlay {
+            position: fixed;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 20, 0.9);
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 11px;
+            color: #ccc;
+            z-index: 150;
+            backdrop-filter: blur(10px);
+            display: none;
+            white-space: nowrap;
+        }
+        
+        #keyboard-shortcuts-overlay.visible { display: block; }
+        
+        .shortcut-key {
+            background: #444;
+            border: 1px solid #666;
+            border-radius: 3px;
+            padding: 2px 6px;
+            margin: 0 2px;
+            font-family: monospace;
+            font-weight: bold;
+            color: #fff;
+        }
+        
         /* Canvas Container */
         .canvas-container { padding: 12px; display: flex; flex-direction: column; align-items: center; }
         #display-canvas { 
@@ -224,6 +255,14 @@
     </style>
 </head>
 <body>
+    <!-- Keyboard Shortcuts Overlay -->
+    <div id="keyboard-shortcuts-overlay">
+        <span class="shortcut-key">R</span> Rotate
+        <span class="shortcut-key">G</span> Move  
+        <span class="shortcut-key">S</span> Scale
+        <span class="shortcut-key">ESC</span> Deselect
+    </div>
+    
     <!-- Controls Panel -->
     <div id="controls">
         <div class="collapsible-panel main-panel">
@@ -620,6 +659,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/OutlinePass.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
     <script src="env.js"></script>
     <script src="auth.js"></script>
@@ -629,7 +673,7 @@
     <script src="model-loader.js"></script>
     <script src="model-uploader.js"></script>
     <script src="model-library.js"></script>
-    <script src="object-selector.js"></script>
+    <script src="optimized-selection-system.js"></script>
     <script src="transform-controls-manager.js"></script>
     <!-- Simple layer system - works entirely in 512x512 space -->
     <script src="simple-layer-manager.js"></script>

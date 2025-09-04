@@ -122,13 +122,18 @@ function updateMaterialTextures() {
     }
 }
 
-// Animation loop with performance monitoring
+// Animation loop with performance monitoring and OptimizedSelectionSystem
 function animateWithMonitoring() {
     requestAnimationFrame(animateWithMonitoring);
     if (window.controls) window.controls.update();
-    if (window.renderer && window.scene && window.camera) {
+    
+    // Use optimized selection system render if available, otherwise fallback to regular render
+    if (window.optimizedSelectionSystem) {
+        window.optimizedSelectionSystem.render();
+    } else if (window.renderer && window.scene && window.camera) {
         window.renderer.render(window.scene, window.camera);
     }
+    
     updatePerformanceMonitor();
 }
 
@@ -189,32 +194,42 @@ function initializeApplication() {
     const uvTextureEditor = new UVTextureEditor();
     window.uvTextureEditor = uvTextureEditor;
     
-    // 5b. Initialize object selection system
-    const objectSelector = new ObjectSelector(scene, camera, renderer);
-    window.objectSelector = objectSelector;
+    // 5b. Object selection system will be initialized later via SelectionManager
     
-    // Setup selection event listeners for UI updates
-    window.addEventListener('objectSelected', (event) => {
-        const selectionInfo = document.getElementById('selection-info');
-        const selectedName = document.getElementById('selected-name');
-        const selectedUuid = document.getElementById('selected-uuid');
-        const selectedPosition = document.getElementById('selected-position');
-        
-        if (selectionInfo && selectedName && selectedUuid && selectedPosition) {
-            selectionInfo.style.display = 'block';
-            selectedName.textContent = event.detail.name || 'Unnamed';
-            selectedUuid.textContent = event.detail.uuid.substring(0, 8) + '...';
-            const pos = event.detail.position;
-            selectedPosition.textContent = `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
+    // Setup selection event listeners for UI updates (will be connected by OptimizedSelectionSystem)
+    function setupSelectionUIListeners() {
+        if (window.optimizedSelectionSystem) {
+            window.optimizedSelectionSystem.on('object-selected', (data) => {
+                const selectionInfo = document.getElementById('selection-info');
+                const selectedName = document.getElementById('selected-name');
+                const selectedUuid = document.getElementById('selected-uuid');
+                const selectedPosition = document.getElementById('selected-position');
+                
+                if (selectionInfo && selectedName && selectedUuid && selectedPosition) {
+                    selectionInfo.style.display = 'block';
+                    selectedName.textContent = data.object.name || 'Unnamed';
+                    selectedUuid.textContent = data.object.uuid.substring(0, 8) + '...';
+                    const pos = data.object.position;
+                    selectedPosition.textContent = `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
+                }
+            });
+            
+            window.optimizedSelectionSystem.on('object-deselected', () => {
+                const selectionInfo = document.getElementById('selection-info');
+                if (selectionInfo) {
+                    selectionInfo.style.display = 'none';
+                }
+            });
+            
+            console.log('✅ Optimized selection UI listeners connected');
+        } else {
+            // Retry if OptimizedSelectionSystem isn't ready yet
+            setTimeout(setupSelectionUIListeners, 100);
         }
-    });
+    }
     
-    window.addEventListener('objectDeselected', () => {
-        const selectionInfo = document.getElementById('selection-info');
-        if (selectionInfo) {
-            selectionInfo.style.display = 'none';
-        }
-    });
+    // Schedule UI listener setup after OptimizedSelectionSystem is initialized
+    setTimeout(setupSelectionUIListeners, 500);
     
     // 6. Detect device capabilities
     const capabilities = detectDeviceCapabilities(renderer);
@@ -289,24 +304,32 @@ function initializeApplication() {
         initializeShadowConsole();
     }
     
-    // 13. Initialize TransformControls system (replaces ObjectManipulator)
+    // 13. Initialize OptimizedSelectionSystem (immediate, no delays)
+    if (typeof setupOptimizedSelectionSystem === 'function') {
+        console.log('🚀 Starting OptimizedSelectionSystem...');
+        setupOptimizedSelectionSystem(); // Immediate initialization with efficient retry
+    } else {
+        console.error('❌ setupOptimizedSelectionSystem function not found!');
+    }
+    
+    // 14. Initialize TransformControls system
     if (typeof setupTransformControls === 'function') {
         console.log('🔧 Scheduling TransformControls setup...');
         setTimeout(() => {
             console.log('🔧 Executing setupTransformControls now...');
             setupTransformControls();
-        }, 1000); // Allow object selector to initialize first
+        }, 100); // Minimal delay for system coordination
     } else {
         console.error('❌ setupTransformControls function not found!');
     }
     
-    // 14. Load default model from library (TigerBrite 91x91 with correct scale)
+    // 15. Load default model from library (TigerBrite 91x91 with correct scale)
     setTimeout(() => {
         if (window.libraryBrowser && window.authManager?.supabase) {
             loadDefaultLibraryModel();
-        } else if (typeof window.loadDefaultGLB === 'function') {
-            // Fallback to local GLB if library not available
-            window.loadDefaultGLB('91x91_4.glb', scene);
+        } else {
+            // Library-only loading system - no fallback needed
+            console.log('🏠 Library not available - no fallback GLB loading');
         }
     }, 3000); // Wait for library system to initialize
     
@@ -511,17 +534,12 @@ async function loadDefaultLibraryModel() {
             
             console.log('✅ Default library model loaded successfully');
         } else {
-            console.warn('⚠️ TigerBrite 91x91 model not found in library, falling back to local GLB');
-            if (typeof window.loadDefaultGLB === 'function') {
-                window.loadDefaultGLB('91x91_4.glb', window.scene);
-            }
+            console.warn('⚠️ TigerBrite 91x91 model not found in library - library-only loading system');
         }
     } catch (error) {
         console.error('❌ Failed to load default library model:', error);
-        // Fallback to local GLB
-        if (typeof window.loadDefaultGLB === 'function') {
-            window.loadDefaultGLB('91x91_4.glb', window.scene);
-        }
+        // Library-only loading system - no fallback needed
+        console.log('🏠 Library system error - no fallback GLB loading');
     }
 }
 
