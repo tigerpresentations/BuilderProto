@@ -194,42 +194,7 @@ function initializeApplication() {
     const uvTextureEditor = new UVTextureEditor();
     window.uvTextureEditor = uvTextureEditor;
     
-    // 5b. Object selection system will be initialized later via SelectionManager
-    
-    // Setup selection event listeners for UI updates (will be connected by OptimizedSelectionSystem)
-    function setupSelectionUIListeners() {
-        if (window.optimizedSelectionSystem) {
-            window.optimizedSelectionSystem.on('object-selected', (data) => {
-                const selectionInfo = document.getElementById('selection-info');
-                const selectedName = document.getElementById('selected-name');
-                const selectedUuid = document.getElementById('selected-uuid');
-                const selectedPosition = document.getElementById('selected-position');
-                
-                if (selectionInfo && selectedName && selectedUuid && selectedPosition) {
-                    selectionInfo.style.display = 'block';
-                    selectedName.textContent = data.object.name || 'Unnamed';
-                    selectedUuid.textContent = data.object.uuid.substring(0, 8) + '...';
-                    const pos = data.object.position;
-                    selectedPosition.textContent = `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
-                }
-            });
-            
-            window.optimizedSelectionSystem.on('object-deselected', () => {
-                const selectionInfo = document.getElementById('selection-info');
-                if (selectionInfo) {
-                    selectionInfo.style.display = 'none';
-                }
-            });
-            
-            console.log('✅ Optimized selection UI listeners connected');
-        } else {
-            // Retry if OptimizedSelectionSystem isn't ready yet
-            setTimeout(setupSelectionUIListeners, 100);
-        }
-    }
-    
-    // Schedule UI listener setup after OptimizedSelectionSystem is initialized
-    setTimeout(setupSelectionUIListeners, 500);
+    // 5b. Selection system and UI listeners will be initialized by SystemInitializer
     
     // 6. Detect device capabilities
     const capabilities = detectDeviceCapabilities(renderer);
@@ -304,34 +269,17 @@ function initializeApplication() {
         initializeShadowConsole();
     }
     
-    // 13. Initialize OptimizedSelectionSystem (immediate, no delays)
-    if (typeof setupOptimizedSelectionSystem === 'function') {
-        console.log('🚀 Starting OptimizedSelectionSystem...');
-        setupOptimizedSelectionSystem(); // Immediate initialization with efficient retry
+    // 13. Initialize selection and transform systems using Promise-based approach
+    if (window.systemInitializer) {
+        console.log('🎬 Starting promise-based system initialization...');
+        window.systemInitializer.initialize().then(() => {
+            console.log('✅ All systems initialized successfully');
+        }).catch(error => {
+            console.error('❌ System initialization failed:', error);
+        });
     } else {
-        console.error('❌ setupOptimizedSelectionSystem function not found!');
+        console.error('❌ SystemInitializer not found!');
     }
-    
-    // 14. Initialize TransformControls system
-    if (typeof setupTransformControls === 'function') {
-        console.log('🔧 Scheduling TransformControls setup...');
-        setTimeout(() => {
-            console.log('🔧 Executing setupTransformControls now...');
-            setupTransformControls();
-        }, 100); // Minimal delay for system coordination
-    } else {
-        console.error('❌ setupTransformControls function not found!');
-    }
-    
-    // 15. Load default model from library (TigerBrite 91x91 with correct scale)
-    setTimeout(() => {
-        if (window.libraryBrowser && window.authManager?.supabase) {
-            loadDefaultLibraryModel();
-        } else {
-            // Library-only loading system - no fallback needed
-            console.log('🏠 Library not available - no fallback GLB loading');
-        }
-    }, 3000); // Wait for library system to initialize
     
     // 15. Setup memory monitoring
     if (performance.memory) {

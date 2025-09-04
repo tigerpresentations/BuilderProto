@@ -239,17 +239,12 @@ class TransformControlsManager {
     }
 }
 
-// Initialize TransformControls when DOM is ready
+// Legacy initialization function - kept for backwards compatibility
+// New code should use SystemInitializer instead
 function setupTransformControls() {
-    console.log('🔧 Attempting to setup TransformControls system...');
-    console.log('Dependencies check:', {
-        scene: !!window.scene,
-        camera: !!window.camera,
-        renderer: !!window.renderer,
-        controls: !!window.controls
-    });
+    console.warn('⚠️ setupTransformControls is deprecated. Use SystemInitializer.initializeTransformControls() instead');
     
-    // Wait for other systems to be ready
+    // Only initialize if all dependencies are ready
     if (window.scene && window.camera && window.renderer && window.controls) {
         const transformManager = new TransformControlsManager(
             window.scene, 
@@ -264,12 +259,11 @@ function setupTransformControls() {
             console.log('🔗 Connected TransformControls to OptimizedSelectionSystem');
         }
         
-        console.log('✅ TransformControls system initialized successfully');
+        console.log('✅ TransformControls system initialized (via legacy function)');
         return transformManager;
     } else {
-        console.warn('⏳ TransformControls system waiting for dependencies...');
-        // Retry after a short delay
-        setTimeout(setupTransformControls, 500);
+        console.error('❌ Dependencies not ready for TransformControls');
+        return null;
     }
 }
 

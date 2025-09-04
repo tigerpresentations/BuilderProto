@@ -1,9 +1,11 @@
 // Optimized Selection System - Phase 1 Performance Implementation
 // Follows Three.js best practices for maximum performance
+// Now using native THREE.EventDispatcher for event handling
 
-class OptimizedSelectionSystem {
+class OptimizedSelectionSystem extends THREE.EventDispatcher {
     constructor(scene, camera, renderer, orbitControls) {
-        console.log('🚀 OptimizedSelectionSystem initializing...');
+        super(); // Call THREE.EventDispatcher constructor
+        console.log('🚀 OptimizedSelectionSystem initializing (with THREE.EventDispatcher)...');
         
         this.scene = scene;
         this.camera = camera;
@@ -14,8 +16,8 @@ class OptimizedSelectionSystem {
         this.selectedObject = null;
         this.selectableObjects = [];
         
-        // High-performance OutlinePass setup
-        this.setupOutlinePass();
+        // Simple selection visualization setup
+        this.setupSelectionVisualization();
         
         // TransformControls integration
         this.transformControls = null;
@@ -26,68 +28,31 @@ class OptimizedSelectionSystem {
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
         
-        // Event system - minimal overhead
-        this.eventListeners = new Map();
-        
         // Setup optimized event handling
         this.setupEventSystem();
         
-        console.log('✅ OptimizedSelectionSystem initialized with OutlinePass');
+        console.log('✅ OptimizedSelectionSystem initialized with simple visualization');
     }
     
-    setupOutlinePass() {
-        console.log('🎨 Setting up selection visualization...');
+    setupSelectionVisualization() {
+        console.log('🎨 Setting up simplified selection visualization...');
         
-        // Try OutlinePass if available, fallback to EdgesGeometry
-        this.useOutlinePass = false;
-        
-        if (typeof THREE.EffectComposer !== 'undefined' && 
-            typeof THREE.RenderPass !== 'undefined' && 
-            typeof THREE.OutlinePass !== 'undefined') {
-            
+        // Use the new simple selection visualization
+        if (window.SimpleSelectionVisualization) {
             try {
-                console.log('🎨 Attempting GPU-based OutlinePass...');
-                
-                // Create effect composer for post-processing
-                this.composer = new THREE.EffectComposer(this.renderer);
-                
-                // Add render pass
-                this.renderPass = new THREE.RenderPass(this.scene, this.camera);
-                this.composer.addPass(this.renderPass);
-                
-                // Create optimized outline pass
-                const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
-                this.outlinePass = new THREE.OutlinePass(resolution, this.scene, this.camera);
-                
-                // Performance-optimized outline settings
-                this.outlinePass.edgeStrength = 3.0;
-                this.outlinePass.edgeGlow = 0.5;
-                this.outlinePass.edgeThickness = 1.0;
-                this.outlinePass.pulsePeriod = 0; // Disable CPU-intensive pulsing
-                this.outlinePass.visibleEdgeColor.set('#00ff00'); // Green selection
-                this.outlinePass.hiddenEdgeColor.set('#190a05');
-                
-                this.composer.addPass(this.outlinePass);
-                
-                // Window resize handling for OutlinePass
-                this.handleResize = this.handleResize.bind(this);
-                window.addEventListener('resize', this.handleResize);
-                
-                this.useOutlinePass = true;
-                console.log('✅ OutlinePass configured successfully');
-                
+                this.selectionVisualization = new window.SimpleSelectionVisualization(this.scene);
+                console.log('✅ Simple selection visualization ready');
             } catch (error) {
-                console.warn('⚠️ OutlinePass failed, falling back to EdgesGeometry:', error);
-                this.useOutlinePass = false;
+                console.warn('⚠️ Failed to create SimpleSelectionVisualization, using fallback:', error);
+                this.selectionVisualization = null;
+                this.selectionHelpers = new Map();
             }
         } else {
-            console.warn('⚠️ OutlinePass classes not available, using EdgesGeometry fallback');
+            console.warn('⚠️ SimpleSelectionVisualization not available, creating fallback');
+            // Fallback: create inline simple visualization
+            this.selectionVisualization = null;
+            this.selectionHelpers = new Map();
         }
-        
-        // Selection helpers storage for fallback mode
-        this.selectionHelpers = new Map();
-        
-        console.log(`✅ Selection visualization ready (${this.useOutlinePass ? 'OutlinePass' : 'EdgesGeometry'})`);
     }
     
     setupEventSystem() {
@@ -349,12 +314,11 @@ class OptimizedSelectionSystem {
         this.selectedObject = object;
         object.userData.selected = true;
         
-        // Apply selection visualization
-        if (this.useOutlinePass) {
-            // GPU-based outline selection (90% faster than EdgesGeometry)
-            this.outlinePass.selectedObjects = [object];
+        // Apply simple selection visualization
+        if (this.selectionVisualization) {
+            this.selectionVisualization.applySelection(object);
         } else {
-            // Fallback to EdgesGeometry selection
+            // Fallback to basic edges
             this.createEdgesSelection(object);
         }
         
@@ -374,10 +338,10 @@ class OptimizedSelectionSystem {
         // Show keyboard shortcuts overlay
         this.showKeyboardShortcuts();
         
-        // Emit selection event
-        this.emit('object-selected', { object });
+        // Dispatch Three.js native event
+        this.dispatchEvent({ type: 'object-selected', object: object });
         
-        console.log('✅ Object selected with OutlinePass');
+        console.log('✅ Object selected with simple visualization');
     }
     
     deselectObject() {
@@ -392,9 +356,9 @@ class OptimizedSelectionSystem {
         object.userData.selected = false;
         
         // Clear selection visualization
-        if (this.useOutlinePass) {
-            console.log('🎨 Clearing OutlinePass selection');
-            this.outlinePass.selectedObjects = [];
+        if (this.selectionVisualization) {
+            console.log('🎨 Clearing simple selection');
+            this.selectionVisualization.clearSelection();
         } else {
             console.log('🎨 Removing EdgesGeometry selection');
             this.removeEdgesSelection(object);
@@ -421,8 +385,8 @@ class OptimizedSelectionSystem {
         // Hide keyboard shortcuts overlay
         this.hideKeyboardShortcuts();
         
-        // Emit deselection event
-        this.emit('object-deselected', { object });
+        // Dispatch Three.js native event
+        this.dispatchEvent({ type: 'object-deselected', object: object });
         
         console.log('✅ Object deselected - controls should be hidden');
     }
@@ -456,8 +420,8 @@ class OptimizedSelectionSystem {
         // Update selectable objects
         this.updateSelectableObjects();
         
-        // Emit deletion event
-        this.emit('object-deleted', { object: objectToDelete });
+        // Dispatch Three.js native event
+        this.dispatchEvent({ type: 'object-deleted', object: objectToDelete });
     }
     
     cycleSelection(direction = 1) {
@@ -561,7 +525,7 @@ class OptimizedSelectionSystem {
         return false;
     }
     
-    // EdgesGeometry fallback methods
+    // Legacy EdgesGeometry methods (kept as fallback)
     createEdgesSelection(object) {
         console.log('🎨 Creating EdgesGeometry selection for:', object.name);
         
@@ -624,52 +588,32 @@ class OptimizedSelectionSystem {
         }
     }
     
-    // Efficient rendering with OutlinePass or regular rendering
+    // Simple rendering without post-processing
     render() {
-        // Use composer for outline effects if available, otherwise regular renderer
-        if (this.useOutlinePass && this.selectedObject) {
-            this.composer.render();
-        } else {
-            this.renderer.render(this.scene, this.camera);
+        // Update selection visualization if needed
+        if (this.selectionVisualization && this.selectedObject) {
+            this.selectionVisualization.updateSelection();
         }
+        
+        // Regular rendering - no post-processing needed
+        this.renderer.render(this.scene, this.camera);
     }
     
-    handleResize() {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        
-        // Update composer size
-        this.composer.setSize(width, height);
-        
-        // Update outline pass resolution
-        if (this.outlinePass) {
-            this.outlinePass.resolution.set(width, height);
-        }
-    }
-    
-    // Minimal event system for performance
+    // Legacy event system methods for backwards compatibility
+    // These now delegate to THREE.EventDispatcher methods
     on(event, callback) {
-        if (!this.eventListeners.has(event)) {
-            this.eventListeners.set(event, []);
-        }
-        this.eventListeners.get(event).push(callback);
+        console.warn('⚠️ Legacy .on() method - please use addEventListener()');
+        this.addEventListener(event, callback);
     }
     
     off(event, callback) {
-        if (this.eventListeners.has(event)) {
-            const callbacks = this.eventListeners.get(event);
-            const index = callbacks.indexOf(callback);
-            if (index > -1) {
-                callbacks.splice(index, 1);
-            }
-        }
+        console.warn('⚠️ Legacy .off() method - please use removeEventListener()');
+        this.removeEventListener(event, callback);
     }
     
     emit(event, data) {
-        if (this.eventListeners.has(event)) {
-            const callbacks = this.eventListeners.get(event);
-            callbacks.forEach(callback => callback(data));
-        }
+        console.warn('⚠️ Legacy .emit() method - please use dispatchEvent()');
+        this.dispatchEvent({ type: event, ...data });
     }
     
     // Keyboard shortcuts overlay management
@@ -704,7 +648,6 @@ class OptimizedSelectionSystem {
         // Remove event listeners
         this.renderer.domElement.removeEventListener('pointerdown', this.handleMouseInteraction);
         document.removeEventListener('keydown', this.handleKeyboard);
-        window.removeEventListener('resize', this.handleResize);
         
         // Clear all selection helpers
         this.selectionHelpers.forEach((helper, object) => {
@@ -712,21 +655,19 @@ class OptimizedSelectionSystem {
         });
         this.selectionHelpers.clear();
         
-        // Dispose of composer
-        if (this.composer) {
-            this.composer.dispose();
+        // Dispose of selection visualization
+        if (this.selectionVisualization) {
+            this.selectionVisualization.dispose();
         }
-        
-        // Clear event listeners
-        this.eventListeners.clear();
         
         console.log('✅ OptimizedSelectionSystem disposed');
     }
 }
 
-// Optimized initialization function
+// Legacy initialization function - kept for backwards compatibility
+// New code should use SystemInitializer instead
 function setupOptimizedSelectionSystem() {
-    console.log('🚀 Setting up OptimizedSelectionSystem...');
+    console.warn('⚠️ setupOptimizedSelectionSystem is deprecated. Use SystemInitializer.initializeSelectionSystem() instead');
     
     // Check for required dependencies
     const dependencies = {
@@ -736,15 +677,7 @@ function setupOptimizedSelectionSystem() {
         orbitControls: window.controls
     };
     
-    // Log dependency status
-    console.log('Dependencies check:', {
-        scene: !!dependencies.scene,
-        camera: !!dependencies.camera,
-        renderer: !!dependencies.renderer,
-        orbitControls: !!dependencies.orbitControls
-    });
-    
-    // Immediate initialization if dependencies are ready
+    // Only initialize if all dependencies are ready
     if (Object.values(dependencies).every(dep => dep)) {
         const selectionSystem = new OptimizedSelectionSystem(
             dependencies.scene,
@@ -759,12 +692,11 @@ function setupOptimizedSelectionSystem() {
         // Update selectable objects
         selectionSystem.updateSelectableObjects();
         
-        console.log('✅ OptimizedSelectionSystem ready');
+        console.log('✅ OptimizedSelectionSystem ready (via legacy function)');
         return selectionSystem;
     } else {
-        console.warn('⏳ OptimizedSelectionSystem waiting for dependencies...');
-        // Use requestAnimationFrame for efficient retry
-        requestAnimationFrame(setupOptimizedSelectionSystem);
+        console.error('❌ Dependencies not ready for OptimizedSelectionSystem');
+        return null;
     }
 }
 
