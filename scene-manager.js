@@ -2,6 +2,9 @@
 let scene, camera, renderer, controls;
 let hemisphereLight, mainLight, fillLight, floor, gridHelper;
 
+// Camera system variables
+let perspectiveCamera, orthographicCamera, currentCamera;
+
 // Scale conversion constants - 1 Three.js unit = 1 foot
 const SCALE = {
     FEET_PER_UNIT: 1,
@@ -59,10 +62,33 @@ function setupScene() {
 }
 
 function setupCamera() {
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    // Position camera for human perspective in trade show environment
+    // Create perspective camera (default)
+    perspectiveCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    // Create orthographic camera
+    const aspect = window.innerWidth / window.innerHeight;
+    const viewSize = 15; // View size in Three.js units (15 feet) - wider view for clearer difference
+    orthographicCamera = new THREE.OrthographicCamera(
+        -viewSize * aspect, viewSize * aspect, // left, right
+        viewSize, -viewSize,                   // top, bottom
+        0.1, 1000                             // near, far
+    );
+    
+    // Position both cameras for human perspective in trade show environment
     // 8 feet from booth, at eye level (5.5 feet), with slight viewing angle
-    camera.position.set(feetToUnits(8), feetToUnits(5.5), feetToUnits(6));
+    const cameraPosition = [feetToUnits(8), feetToUnits(5.5), feetToUnits(6)];
+    perspectiveCamera.position.set(...cameraPosition);
+    orthographicCamera.position.set(...cameraPosition);
+    
+    // Start with perspective camera
+    currentCamera = perspectiveCamera;
+    camera = currentCamera; // Export to global scope
+    
+    // Export camera variables to global scope after creation
+    window.perspectiveCamera = perspectiveCamera;
+    window.orthographicCamera = orthographicCamera;
+    window.currentCamera = currentCamera;
+    
     return camera;
 }
 
@@ -128,8 +154,20 @@ function setupRenderer() {
     
     // Handle resize
     window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
+        const aspect = window.innerWidth / window.innerHeight;
+        
+        // Update perspective camera
+        perspectiveCamera.aspect = aspect;
+        perspectiveCamera.updateProjectionMatrix();
+        
+        // Update orthographic camera
+        const viewSize = 10;
+        orthographicCamera.left = -viewSize * aspect;
+        orthographicCamera.right = viewSize * aspect;
+        orthographicCamera.top = viewSize;
+        orthographicCamera.bottom = -viewSize;
+        orthographicCamera.updateProjectionMatrix();
+        
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
     
@@ -252,6 +290,86 @@ function setupGridOverlay() {
     window.gridHelper = gridHelper;
 }
 
+// Camera switching functions
+function switchToPerspective() {
+    if (currentCamera === perspectiveCamera) return;
+    
+    // Copy position and rotation from current camera
+    perspectiveCamera.position.copy(currentCamera.position);
+    perspectiveCamera.rotation.copy(currentCamera.rotation);
+    
+    currentCamera = perspectiveCamera;
+    camera = currentCamera; // Update global reference
+    window.camera = currentCamera; // Update the render loop reference
+    window.currentCamera = currentCamera; // Update global export
+    
+    // Update controls
+    if (controls) {
+        controls.object = currentCamera;
+        controls.update(); // Force controls update
+    }
+    
+    // Update selection system camera reference
+    if (window.optimizedSelectionSystem) {
+        window.optimizedSelectionSystem.camera = currentCamera;
+        console.log('🔄 Updated OptimizedSelectionSystem camera to perspective');
+    }
+    
+    // Update projection matrix
+    perspectiveCamera.updateProjectionMatrix();
+    
+    console.log('📷 Switched to Perspective Camera');
+}
+
+function switchToOrthographic() {
+    if (currentCamera === orthographicCamera) return;
+    
+    // Copy position and rotation from current camera
+    orthographicCamera.position.copy(currentCamera.position);
+    orthographicCamera.rotation.copy(currentCamera.rotation);
+    
+    currentCamera = orthographicCamera;
+    camera = currentCamera; // Update global reference
+    window.camera = currentCamera; // Update the render loop reference
+    window.currentCamera = currentCamera; // Update global export
+    
+    // Update controls
+    if (controls) {
+        controls.object = currentCamera;
+        controls.update(); // Force controls update
+    }
+    
+    // Update selection system camera reference
+    if (window.optimizedSelectionSystem) {
+        window.optimizedSelectionSystem.camera = currentCamera;
+        console.log('🔄 Updated OptimizedSelectionSystem camera to orthographic');
+    }
+    
+    // Update projection matrix
+    orthographicCamera.updateProjectionMatrix();
+    
+    console.log('📷 Switched to Orthographic Camera');
+}
+
+// Toggle between camera types
+function toggleCameraMode() {
+    console.log('🎛️ toggleCameraMode called');
+    console.log('📹 Current camera info:', {
+        currentCamera: !!currentCamera,
+        isPerspective: currentCamera?.isPerspectiveCamera,
+        perspectiveCamera: !!perspectiveCamera,
+        orthographicCamera: !!orthographicCamera
+    });
+    
+    if (currentCamera.isPerspectiveCamera) {
+        console.log('🔄 Switching to orthographic');
+        switchToOrthographic();
+    } else {
+        console.log('🔄 Switching to perspective');
+        switchToPerspective();
+    }
+}
+
 function updateLighting() {
     const config = window.lightingConfig;
     
@@ -329,6 +447,13 @@ window.setupCamera = setupCamera;
 window.setupRenderer = setupRenderer;
 window.animate = animate;
 window.updateLighting = updateLighting;
+
+// Export camera functions
+window.toggleCameraMode = toggleCameraMode;
+window.switchToPerspective = switchToPerspective;
+window.switchToOrthographic = switchToOrthographic;
+
+// Camera variables are exported in setupCamera() after creation
 
 // Export controls after they're created
 window.getControls = () => controls;

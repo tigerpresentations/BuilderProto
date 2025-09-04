@@ -678,6 +678,36 @@ function initializeControls() {
         });
     }
     
+    // Camera toggle control
+    const cameraToggle = document.getElementById('camera-toggle');
+    if (cameraToggle) {
+        cameraToggle.addEventListener('click', () => {
+            console.log('🔘 Camera toggle button clicked');
+            console.log('📋 Available functions:', {
+                toggleCameraMode: !!window.toggleCameraMode,
+                camera: !!window.camera,
+                perspectiveCamera: !!window.perspectiveCamera,
+                orthographicCamera: !!window.orthographicCamera
+            });
+            
+            if (window.toggleCameraMode) {
+                console.log('🔄 Calling toggleCameraMode()');
+                window.toggleCameraMode();
+                
+                // Update button text to reflect current camera mode
+                if (window.camera && window.camera.isPerspectiveCamera) {
+                    cameraToggle.textContent = '📷 Perspective View';
+                } else {
+                    cameraToggle.textContent = '📐 Orthographic View';
+                }
+            } else {
+                console.log('❌ toggleCameraMode function not available');
+            }
+        });
+    } else {
+        console.log('❌ Camera toggle button not found');
+    }
+    
     // Material controls
     const materialBrightness = document.getElementById('material-brightness');
     const lightingIntensity = document.getElementById('lighting-intensity');

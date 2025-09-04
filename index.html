@@ -350,11 +350,16 @@
                         <button id="floor-preset-6x6" style="flex: 1; padding: 4px 8px; font-size: 10px;">20×20</button>
                     </div>
                 </div>
-                <!-- Grid Toggle - Available to all users -->
-                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 8px; font-size: 11px;">
-                    <input type="checkbox" id="grid-toggle" checked style="margin: 0; vertical-align: middle;">
-                    Show Scale Grid
-                </label>
+                <!-- Scene Display Controls -->
+                <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px;">
+                        <input type="checkbox" id="grid-toggle" checked style="margin: 0; vertical-align: middle;">
+                        Show Scale Grid
+                    </label>
+                    <button id="camera-toggle" style="padding: 4px 8px; font-size: 11px; cursor: pointer;">
+                        📷 Perspective View
+                    </button>
+                </div>
                 <!-- Developer Console Buttons - Moved to Admin Panel -->
             </div>
         </div>

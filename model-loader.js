@@ -246,12 +246,41 @@ function centerCameraOnModel(model, boundingBox, size) {
     const center = boundingBox.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
     
-    // Calculate distance to achieve ~75% viewport coverage
-    const fov = window.camera.fov * (Math.PI / 180); // Convert to radians
-    const distance = maxDim / (2 * Math.tan(fov / 2)) * 1.1; // 1.1 factor for ~75% coverage
+    let distance;
+    let newPosition;
     
-    // Position camera in front of the model (negative Z relative to model center)
-    const newPosition = new THREE.Vector3(center.x, center.y, center.z + distance);
+    if (window.camera.isPerspectiveCamera) {
+        // Perspective camera: calculate distance based on FOV
+        const fov = window.camera.fov * (Math.PI / 180); // Convert to radians
+        distance = maxDim / (2 * Math.tan(fov / 2)) * 1.1; // 1.1 factor for ~75% coverage
+        
+        // Position camera in front of the model (negative Z relative to model center)
+        newPosition = new THREE.Vector3(center.x, center.y, center.z + distance);
+    } else {
+        // Orthographic camera: adjust zoom/view size instead of distance
+        // For orthographic, we'll maintain current distance but adjust the view
+        const currentDistance = window.camera.position.distanceTo(center);
+        distance = Math.max(currentDistance, maxDim * 1.5); // Ensure reasonable distance
+        
+        // Position camera in front of the model
+        newPosition = new THREE.Vector3(center.x, center.y, center.z + distance);
+        
+        // Adjust orthographic camera view size to fit the model
+        const aspect = window.innerWidth / window.innerHeight;
+        const viewSize = maxDim * 0.75; // Show ~75% of model bounds
+        
+        window.camera.left = -viewSize * aspect;
+        window.camera.right = viewSize * aspect;
+        window.camera.top = viewSize;
+        window.camera.bottom = -viewSize;
+        window.camera.updateProjectionMatrix();
+        
+        console.log('📐 Adjusted orthographic camera view size for model:', {
+            modelSize: maxDim,
+            viewSize: viewSize,
+            cameraType: 'orthographic'
+        });
+    }
     
     // Animate camera to new position, looking at model center
     animateCamera(newPosition, center);
