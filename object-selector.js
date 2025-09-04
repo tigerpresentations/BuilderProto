@@ -71,16 +71,13 @@ class ObjectSelector {
                 type: child.type,
                 userData: child.userData,
                 isFloor: child === window.floor,
-                isLight: child.isLight,
-                isManipulationHelper: child.userData?.isManipulationHelper
+                isLight: child.isLight
             });
             
-            // Skip floor, lights, manipulation helpers, and other non-model objects
+            // Skip floor, lights, and other non-model objects
             if (child === window.floor || 
                 child.isLight || 
-                child.type === 'HemisphereLight' ||
-                child.userData?.isManipulationHelper ||
-                child.userData?.isRotationHandle) {
+                child.type === 'HemisphereLight') {
                 return;
             }
             
@@ -137,37 +134,16 @@ class ObjectSelector {
             }
         } else {
             // Check if we clicked on manipulation helpers before deselecting
-            const allSceneObjects = [];
-            this.scene.traverse((obj) => {
-                if (obj.isMesh) {
-                    allSceneObjects.push(obj);
-                }
-            });
+            // Check for intersection with selectable objects only
+            const intersects = this.raycaster.intersectObjects(this.selectableObjects, false);
             
-            const allIntersects = this.raycaster.intersectObjects(allSceneObjects, false);
-            const hitManipulationHelper = allIntersects.find(hit => {
-                const obj = hit.object;
-                console.log('🔍 Checking intersection:', {
-                    objectName: obj.name,
-                    isRotationHandle: obj.userData.isRotationHandle,
-                    parentIsManipulationHelper: obj.parent?.userData.isManipulationHelper,
-                    userData: obj.userData
-                });
-                return obj.userData.isRotationHandle || 
-                       obj.parent?.userData.isManipulationHelper;
-            });
-            
-            console.log('🔍 ObjectSelector: No selectable objects hit', {
-                allIntersects: allIntersects.length,
-                hitManipulationHelper: !!hitManipulationHelper
-            });
-            
-            if (!hitManipulationHelper) {
+            if (intersects.length === 0) {
                 // Clicked on empty space/background - deselect
-                console.log('🔍 ObjectSelector: Deselecting (no manipulation helper hit)');
+                console.log('🔍 ObjectSelector: No objects hit, deselecting');
                 this.deselectObject();
             } else {
-                console.log('🔍 ObjectSelector: Keeping selection (clicked on manipulation helper)');
+                // TransformControls will handle its own manipulation events automatically
+                console.log('🔍 ObjectSelector: Hit detected, TransformControls will handle manipulation');
             }
         }
     }

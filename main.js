@@ -289,11 +289,15 @@ function initializeApplication() {
         initializeShadowConsole();
     }
     
-    // 13. Initialize object manipulation system
-    if (typeof setupObjectManipulation === 'function') {
+    // 13. Initialize TransformControls system (replaces ObjectManipulator)
+    if (typeof setupTransformControls === 'function') {
+        console.log('🔧 Scheduling TransformControls setup...');
         setTimeout(() => {
-            setupObjectManipulation();
+            console.log('🔧 Executing setupTransformControls now...');
+            setupTransformControls();
         }, 1000); // Allow object selector to initialize first
+    } else {
+        console.error('❌ setupTransformControls function not found!');
     }
     
     // 14. Load default model from library (TigerBrite 91x91 with correct scale)

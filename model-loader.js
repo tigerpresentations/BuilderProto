@@ -115,11 +115,8 @@ function placeModelOnFloor(model, scene) {
     }
     
     // Update UI
-    const clearModelBtn = document.getElementById('clear-model-btn');
     const modelControls = document.getElementById('model-controls');
     const status = document.getElementById('status');
-    
-    if (clearModelBtn) clearModelBtn.style.display = 'block';
     if (modelControls) modelControls.style.display = 'block';
     if (status) {
         status.textContent = `Loaded model (${imageMaterials.length} Image materials found)`;
@@ -226,28 +223,6 @@ function setupModelControlListeners() {
         rotYInput.addEventListener('blur', updateRotationFromInput);
     }
     
-    // Clear model button
-    const clearModelBtn = document.getElementById('clear-model-btn');
-    if (clearModelBtn) {
-        clearModelBtn.addEventListener('click', () => {
-            if (currentModel && window.scene) {
-                cleanupModel(currentModel);
-                window.scene.remove(currentModel);
-                currentModel = null;
-                imageMaterials = [];
-                
-                clearModelBtn.style.display = 'none';
-                const modelControls = document.getElementById('model-controls');
-                const backlightToggle = document.getElementById('backlight-toggle');
-                const status = document.getElementById('status');
-                
-                if (modelControls) modelControls.style.display = 'none';
-                if (backlightToggle) backlightToggle.checked = false;
-                if (status) status.textContent = 'Drop a GLB file to begin';
-                
-            }
-        });
-    }
 }
 
 function loadDefaultGLB(filename, scene) {

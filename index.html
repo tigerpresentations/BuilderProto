@@ -241,7 +241,6 @@
                         </div>
                         <input type="range" id="rot-y" min="0" max="360" step="1" value="0" style="width: 100%;">
                     </div>
-                    <button id="clear-model-btn" style="display: none;">Clear Model</button>
                 </div>
                 
                 <!-- GLB Model Loading - Moved to Admin Panel -->
@@ -620,6 +619,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
     <script src="env.js"></script>
     <script src="auth.js"></script>
@@ -630,7 +630,7 @@
     <script src="model-uploader.js"></script>
     <script src="model-library.js"></script>
     <script src="object-selector.js"></script>
-    <script src="object-manipulator.js"></script>
+    <script src="transform-controls-manager.js"></script>
     <!-- Simple layer system - works entirely in 512x512 space -->
     <script src="simple-layer-manager.js"></script>
     <script src="simple-interactive-editor.js"></script>
