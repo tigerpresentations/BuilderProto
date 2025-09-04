@@ -109,11 +109,12 @@ class SavedDesignsUI {
     updateAuthState() {
         if (!this.elements.panel) return;
 
-        // Check authentication state from both AuthManager and SavedSceneManager
+        // Check authentication state - use AuthManager as primary source
         const authManagerAuthenticated = window.authManager?.isAuthenticated() || false;
         const savedSceneManagerAuthenticated = this.savedSceneManager?.user !== null;
         
-        this.isAuthenticated = authManagerAuthenticated && savedSceneManagerAuthenticated;
+        // Use AuthManager authentication as primary (savedSceneManager is optional)
+        this.isAuthenticated = authManagerAuthenticated;
         
         console.log('🔍 Auth state check:', {
             authManager: authManagerAuthenticated,

@@ -4,7 +4,7 @@
 class SavedSceneManager {
     constructor(supabase) {
         this.supabase = supabase;
-        this.serializer = window.sceneSerializer;
+        this.serializer = new SceneSerializationManager(supabase);
         this.assetManager = window.assetManager;
         this.currentScene = null;
         this.user = null;
@@ -84,18 +84,43 @@ class SavedSceneManager {
         try {
             const startTime = performance.now();
             
-            // 1. Serialize the current scene
-            const serializedData = await this.serializer.serializeScene(
-                window.scene,
-                window.camera,
-                this.getLightsFromScene(window.scene),
-                {
-                    includeCanvasTexture: options.includeCanvasTexture !== false,
-                    generateThumbnail: options.generateThumbnail !== false
-                }
+            // Delegate to SceneSerializationManager which handles everything
+            const savedScene = await this.serializer.saveScene(
+                sceneName,
+                description || ''
             );
             
-            // 2. Create scene record
+            // Update local state
+            this.currentScene = savedScene;
+            await this.loadUserScenes(); // Refresh the list
+            
+            const endTime = performance.now();
+            console.log(`✅ Scene saved successfully in ${(endTime - startTime).toFixed(2)}ms`);
+            
+            // Dispatch success event
+            this.dispatchEvent('sceneSaved', {
+                scene: savedScene,
+                savetime: endTime - startTime
+            });
+            
+            return savedScene;
+            
+        } catch (error) {
+            console.error('❌ Failed to save scene:', error);
+            
+            // Dispatch error event
+            this.dispatchEvent('saveError', {
+                error: error,
+                sceneName: sceneName
+            });
+            
+            throw error;
+        }
+    }
+
+    // Rest of method - remove old logic
+    /*
+            // OLD LOGIC - REPLACED BY SceneSerializationManager
             const sceneRecord = {
                 user_id: this.user.id,
                 name: sceneName,
@@ -252,7 +277,7 @@ class SavedSceneManager {
     }
 
     /**
-     * Load a complete scene from Supabase
+     * Load a complete scene from Supabase using Three.js native serialization
      * @param {string} sceneId - Scene ID to load
      * @returns {Object} Loaded scene data
      */
@@ -261,106 +286,36 @@ class SavedSceneManager {
             throw new Error('User must be authenticated to load scenes');
         }
 
+        if (!this.serializer) {
+            throw new Error('SerializationManager not initialized');
+        }
+
         try {
             console.log(`🔄 Loading scene: ${sceneId}`);
             const startTime = performance.now();
-
-            // 1. Load scene data from database
-            const { data: sceneData, error: sceneError } = await this.supabase
-                .from('scenes')
-                .select('*')
-                .eq('id', sceneId)
-                .single();
-
-            if (sceneError) {
-                throw new Error(`Failed to load scene: ${sceneError.message}`);
-            }
-
-            console.log('📊 Scene data loaded:', {
-                name: sceneData.name,
-                assetCount: sceneData.asset_count,
-                canvasResolution: sceneData.canvas_resolution
-            });
-
-            // 2. Load scene assets from database
-            const { data: sceneAssets, error: assetsError } = await this.supabase
-                .from('scene_assets')
-                .select('*')
-                .eq('scene_id', sceneId)
-                .order('created_at', { ascending: true });
-
-            if (assetsError) {
-                throw new Error(`Failed to load scene assets: ${assetsError.message}`);
-            }
-
-            console.log(`📦 Loaded ${sceneAssets?.length || 0} scene assets`);
-
-            // 3. Clear current scene - remove ALL user-added models
-            // First use the standard clearAllModels for tracked models
-            if (window.clearAllModels) {
-                window.clearAllModels();
-            }
             
-            // Then clean up any untracked models (from previous loads that weren't properly registered)
-            const objectsToRemove = [];
-            window.scene.traverse(child => {
-                // Remove any Scene or Group that looks like a loaded model
-                if ((child.type === 'Scene' || child.type === 'Group') && 
-                    child.userData.isMultiModelInstance && 
-                    child !== window.floor) {
-                    objectsToRemove.push(child);
+            // Use Three.js native serialization for loading
+            const result = await this.serializer.loadScene(sceneId);
+            
+            const loadTime = performance.now() - startTime;
+            console.log(`✅ Scene loaded successfully in ${loadTime.toFixed(2)}ms:`, {
+                id: result.id,
+                name: result.name,
+                objects: window.scene?.children?.length || 0
+            });
+            
+            // Update selection system after load
+            setTimeout(() => {
+                console.log('🔄 Updating selection system after scene load...');
+                if (window.optimizedSelectionSystem) {
+                    window.optimizedSelectionSystem.updateSelectableObjects();
                 }
-            });
+            }, 100);
             
-            objectsToRemove.forEach(obj => {
-                console.log(`🗑️ Removing untracked model: ${obj.name}`);
-                // Clean up the object
-                obj.traverse(child => {
-                    if (child.geometry) child.geometry.dispose();
-                    if (child.material) {
-                        if (Array.isArray(child.material)) {
-                            child.material.forEach(mat => mat.dispose());
-                        } else {
-                            child.material.dispose();
-                        }
-                    }
-                });
-                // Remove from scene
-                window.scene.remove(obj);
-            });
-
-            // 4. Deserialize and reconstruct scene
-            const reconstructedScene = await this.reconstructScene(sceneData, sceneAssets);
-
-            // 5. Apply camera and lighting
-            if (sceneData.camera_data) {
-                this.applyCameraData(sceneData.camera_data);
-            }
-
-            if (sceneData.lighting_data) {
-                this.applyLightingData(sceneData.lighting_data);
-            }
-
-            this.currentScene = sceneData;
-            
-            const endTime = performance.now();
-            console.log(`✅ Scene loaded successfully in ${(endTime - startTime).toFixed(2)}ms:`, {
-                id: sceneData.id,
-                name: sceneData.name,
-                objects: sceneData.asset_count
-            });
-
-            // Dispatch load event
-            this.dispatchEvent('scene-loaded', { 
-                scene: sceneData, 
-                assets: sceneAssets,
-                reconstructedScene 
-            });
-
             return {
-                scene: sceneData,
-                assets: sceneAssets,
-                reconstructedScene
+                success: true,
+                scene: result,
+                loadTime: loadTime
             };
 
         } catch (error) {
@@ -368,6 +323,7 @@ class SavedSceneManager {
             throw error;
         }
     }
+
 
     /**
      * Reconstruct Three.js scene from serialized data
