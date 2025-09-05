@@ -2,21 +2,22 @@
 
 ## Project Overview
 
-BuilderProto is a Three.js-based 3D texture editing application that allows users to load GLB/GLTF 3D models and apply real-time canvas-based textures to materials with "Image" in their names. The project consists of two main HTML applications and a modular JavaScript architecture.
+BuilderProto is a professional-grade Three.js-based 3D texture editing application that allows users to load GLB/GLTF 3D models and apply real-time canvas-based textures to materials with "Image" in their names. The project has a production-ready foundation with optimized database performance, secure authentication, and modular JavaScript architecture.
 
 ## Current Architecture
 
 ### HTML Applications
 
-1. **glb-scene-editor-1024.html** - Main high-resolution application
+1. **index.html** (formerly glb-scene-editor-1024.html) - Production application
    - Full-featured UI with collapsible panels
    - 1024x1024 texture resolution (with fallbacks to 512x512 and 256x256)
    - Modern Three.js editor-style interface
-   - Authentication integration with Supabase
+   - Secure Supabase authentication with environment variable injection
    - Advanced lighting console with presets
    - Layer-based image management system
-   - Drag-and-drop support for GLB files and images
+   - Model library integration with database
    - Real-time performance monitoring
+   - **Production Ready**: Optimized database performance and deployment configuration
 
 2. **glb-scene-editor-1024-backup.html** - Simplified backup version
    - Basic functionality with legacy UI components
@@ -25,15 +26,16 @@ BuilderProto is a Three.js-based 3D texture editing application that allows user
 
 ### Core JavaScript Modules
 
-#### 1. **main.js** - Application orchestrator (14,469 lines)
+#### 1. **main.js** - Application orchestrator
 **Key Features:**
 - Device capability detection using Three.js renderer capabilities
-- Performance monitoring with automatic quality fallback
-- Drag-and-drop handler for both GLB files and images
-- Main application initialization sequence
+- Performance monitoring with automatic quality fallback (1024→512→256px)
+- Model library integration with automatic loading
+- Promise-based initialization system eliminates race conditions
 - UVTextureEditor class for Three.js texture integration
 - Memory monitoring and optimization
 - Global state management
+- **Production Optimizations**: Adaptive performance system, FPS monitoring
 
 **Architecture Pattern:**
 ```javascript
