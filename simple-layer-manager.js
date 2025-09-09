@@ -205,32 +205,58 @@ class SimpleLayerManager {
     }
     
     renderLayers() {
-        // Get the display canvas (now 1024x1024)
+        // Check if we have a texture-specific canvas
+        let targetCanvas = null;
+        let targetCtx = null;
+        
+        if (this.textureCanvas) {
+            // Use the model's specific texture canvas
+            targetCanvas = this.textureCanvas;
+            targetCtx = targetCanvas.getContext('2d');
+        }
+        
+        // Also render to display canvas for UI
         const displayCanvas = document.getElementById('display-canvas');
         if (!displayCanvas) return;
         
-        const ctx = displayCanvas.getContext('2d');
+        const displayCtx = displayCanvas.getContext('2d');
         const canvasSize = displayCanvas.width;
         
-        // Clear canvas with white background
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvasSize, canvasSize);
+        // Clear both canvases with white background
+        displayCtx.fillStyle = 'white';
+        displayCtx.fillRect(0, 0, canvasSize, canvasSize);
+        
+        if (targetCtx && targetCanvas) {
+            targetCtx.fillStyle = 'white';
+            targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
+        }
         
         // Render layers in order (bottom to top)
         for (const layerId of this.layerOrder) {
             const layer = this.layers.get(layerId);
             if (layer && layer.visible) {
-                layer.renderTo(ctx, canvasSize);
+                // Render to display canvas
+                layer.renderTo(displayCtx, canvasSize);
+                
+                // Also render to texture canvas if available
+                if (targetCtx && targetCanvas) {
+                    layer.renderTo(targetCtx, targetCanvas.width);
+                }
             }
         }
         
-        // Update Three.js texture (no selection drawing here)
-        if (window.uvTextureEditor) {
-            window.uvTextureEditor.updateTexture();
-        }
-        
-        if (window.canvasTexture) {
-            window.canvasTexture.needsUpdate = true;
+        // Update the model's texture
+        if (this.instanceId && window.textureInstanceManager) {
+            window.textureInstanceManager.updateTexture(this.instanceId);
+        } else {
+            // Fallback to global texture update
+            if (window.uvTextureEditor) {
+                window.uvTextureEditor.updateTexture();
+            }
+            
+            if (window.canvasTexture) {
+                window.canvasTexture.needsUpdate = true;
+            }
         }
     }
     

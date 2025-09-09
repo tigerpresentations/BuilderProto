@@ -649,10 +649,21 @@
         
         <div class="collapsible-panel main-panel">
             <div class="panel-header" data-panel="canvas-editor">
-                <span>Canvas Texture Editor</span>
+                <h3>Canvas Texture Editor</h3>
                 <span class="panel-toggle">▼</span>
             </div>
             <div class="panel-content">
+                <!-- Texture Instance Controls -->
+                <div class="texture-controls" style="margin-bottom: 12px; padding: 8px; background: rgba(60, 60, 60, 0.5); border-radius: 4px; border-left: 3px solid #28a745;">
+                    <div id="active-texture-info" style="font-size: 11px; color: #aaa;">
+                        Select a model to edit its texture
+                    </div>
+                    <div id="texture-actions" style="margin-top: 8px; display: none;">
+                        <button id="copy-texture-btn" style="background: #6c757d; border-color: #6c757d; padding: 4px 8px; font-size: 10px;">📋 Copy to Other Models</button>
+                        <button id="clear-texture-btn" style="background: #dc3545; border-color: #dc3545; padding: 4px 8px; font-size: 10px; margin-left: 4px;">🗑️ Clear Texture</button>
+                    </div>
+                </div>
+                
                 <!-- Single Canvas Container - Direct Texture Editing -->
                 <div class="canvas-container">
                     <canvas id="display-canvas" width="1024" height="1024"></canvas>
@@ -731,6 +742,7 @@
     <script src="system-initializer.js"></script>
     <!-- Simple layer system - works entirely in 512x512 space -->
     <script src="simple-layer-manager.js"></script>
+    <script src="texture-instance-manager.js"></script>
     <script src="simple-interactive-editor.js"></script>
     <script src="ui-controls.js"></script>
     <!-- Three.js Native Scene Serialization System (replaces custom serialization) -->

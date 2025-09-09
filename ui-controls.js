@@ -1808,6 +1808,62 @@ function setupInspectorEventHandlers(uploaderWorkflow) {
     if (realValueInput) realValueInput.addEventListener('input', updateScaleFactor);
     if (dimensionSelect) dimensionSelect.addEventListener('change', updateScaleFactor);
     if (unitsSelect) unitsSelect.addEventListener('change', updateScaleFactor);
+    
+    // Texture Instance Management buttons
+    const copyTextureBtn = document.getElementById('copy-texture-btn');
+    if (copyTextureBtn) {
+        copyTextureBtn.addEventListener('click', () => {
+            if (window.textureInstanceManager) {
+                const activeTexture = window.textureInstanceManager.getActiveTexture();
+                if (!activeTexture) {
+                    showNotification('No texture selected to copy', 'error');
+                    return;
+                }
+                
+                // Get all model instances except the active one
+                const allInstances = window.textureInstanceManager.getAllInstances();
+                const otherInstances = allInstances.filter(inst => inst.instanceId !== activeTexture.instanceId);
+                
+                if (otherInstances.length === 0) {
+                    showNotification('No other models to copy texture to', 'info');
+                    return;
+                }
+                
+                // For now, copy to all other models (could be enhanced with a selection UI)
+                let copiedCount = 0;
+                otherInstances.forEach(targetInstance => {
+                    if (window.textureInstanceManager.copyTexture(activeTexture.instanceId, targetInstance.instanceId)) {
+                        copiedCount++;
+                    }
+                });
+                
+                if (copiedCount > 0) {
+                    showNotification(`Copied texture to ${copiedCount} model${copiedCount !== 1 ? 's' : ''}`, 'success');
+                } else {
+                    showNotification('Failed to copy texture', 'error');
+                }
+            }
+        });
+    }
+    
+    const clearTextureBtn = document.getElementById('clear-texture-btn');
+    if (clearTextureBtn) {
+        clearTextureBtn.addEventListener('click', () => {
+            if (window.textureInstanceManager) {
+                const activeTexture = window.textureInstanceManager.getActiveTexture();
+                if (!activeTexture) {
+                    showNotification('No texture selected to clear', 'error');
+                    return;
+                }
+                
+                // Clear the layer manager for this texture
+                if (activeTexture.layerManager) {
+                    activeTexture.layerManager.clearLayers();
+                    showNotification(`Cleared texture for ${activeTexture.modelName}`, 'success');
+                }
+            }
+        });
+    }
 }
 
 // Export functions

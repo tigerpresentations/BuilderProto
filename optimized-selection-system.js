@@ -240,6 +240,13 @@ class OptimizedSelectionSystem extends THREE.EventDispatcher {
         // Set as primary selection (for TransformControls)
         this.primarySelection = object;
         
+        // Switch to this model's texture if it has one
+        if (window.textureInstanceManager && object.userData.instanceId) {
+            const instanceId = object.userData.instanceId;
+            console.log('🎨 Switching to texture for selected model:', instanceId);
+            window.textureInstanceManager.switchToTexture(instanceId);
+        }
+        
         // Apply selection visualization
         this.applySelectionVisualization(object);
         

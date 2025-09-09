@@ -58,6 +58,70 @@ function addModelToScene(model, scene, options = {}) {
     // Add to scene
     scene.add(model);
     
+    // Create a unique texture instance for this model
+    let textureData = null;
+    if (window.textureInstanceManager) {
+        textureData = window.textureInstanceManager.createTextureInstance(instanceId, model.name || 'Model');
+    }
+    
+    // Find and apply textures to "Image" materials using Three.js patterns
+    const processedMaterials = new Set();
+    const modelImageMaterials = []; // Materials for this specific model
+    let imageMaterialCount = 0;
+    
+    model.traverse((child) => {
+        if (child.isMesh && child.material) {
+            // Handle both single materials and material arrays
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            
+            materials.forEach(material => {
+                // Avoid processing the same material multiple times
+                if (!processedMaterials.has(material.uuid)) {
+                    processedMaterials.add(material.uuid);
+                    
+                    const matName = material.name || '';
+                    if (matName.toLowerCase().includes('image')) {
+                        modelImageMaterials.push(material);
+                        imageMaterialCount++;
+                        
+                        // Apply this model's unique texture
+                        if (textureData) {
+                            material.map = textureData.texture;
+                        } else if (window.canvasTexture) {
+                            // Fallback to global texture if texture manager not available
+                            material.map = window.canvasTexture;
+                        }
+                        
+                        // Three.js material optimization for texture editing
+                        material.transparent = true;
+                        material.alphaTest = 0.001; // Better than full transparency
+                        material.depthWrite = true;
+                        material.side = THREE.FrontSide; // Performance optimization
+                        
+                        // Initialize material properties for controls
+                        if (!material.color) {
+                            material.color = new THREE.Color(1, 1, 1); // White base color for brightness control
+                        }
+                        if (!material.emissive) {
+                            material.emissive = new THREE.Color(0x000000); // Black = no emission
+                        }
+                        material.emissiveMap = null; // Will be set when emission is enabled
+                        
+                        material.needsUpdate = true;
+                    }
+                }
+            });
+            
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+    
+    // Register materials with texture instance
+    if (textureData && window.textureInstanceManager) {
+        window.textureInstanceManager.applyTextureToMaterials(instanceId, modelImageMaterials);
+    }
+    
     // Store in model tracking system
     const modelData = {
         instanceId,
@@ -68,7 +132,8 @@ function addModelToScene(model, scene, options = {}) {
         boundingBox: box,
         size,
         gridPosition,
-        addedAt: new Date()
+        addedAt: new Date(),
+        imageMaterialCount
     };
     
     sceneModels.set(instanceId, modelData);
@@ -78,10 +143,19 @@ function addModelToScene(model, scene, options = {}) {
         window.optimizedSelectionSystem.updateSelectableObjects();
     }
     
+    // Apply current material control values to the newly loaded model
+    if (window.applyCurrentMaterialSettings) {
+        window.applyCurrentMaterialSettings();
+    }
+    
     // Update scene status
     updateSceneStatus();
     
-    console.log(`✅ Model instance added: ${instanceId} (${model.name})`);
+    console.log(`✅ Model instance added: ${instanceId} (${model.name})`, {
+        imageMaterials: modelData.imageMaterialCount,
+        textureApplied: window.canvasTexture ? true : false
+    });
+    
     return instanceId;
 }
 
@@ -254,6 +328,11 @@ function removeModelInstance(instanceId) {
     }
     
     console.log(`🗑️ Removing model instance: ${instanceId} (${modelData.name})`);
+    
+    // Clean up texture instance
+    if (window.textureInstanceManager) {
+        window.textureInstanceManager.removeTextureInstance(instanceId);
+    }
     
     // Clean up model
     cleanupModel(modelData.model);
@@ -436,6 +515,89 @@ window.cleanupModel = cleanupModel;
 window.centerCameraOnModel = centerCameraOnModel;
 window.setupModelDoubleClickHandler = setupModelDoubleClickHandler;
 
+// Utility function to retroactively apply textures to existing models
+function applyTexturesToAllModels() {
+    console.log('🎨 Applying textures to all models in scene...');
+    
+    let totalImageMaterialsFound = 0;
+    const processedMaterials = new Set();
+    
+    // Process the current single model if it exists
+    if (currentModel) {
+        console.log('🎯 Processing currentModel:', currentModel.name);
+        totalImageMaterialsFound += applyTextureToModel(currentModel, processedMaterials);
+    }
+    
+    // Process all multi-model instances
+    sceneModels.forEach((modelData, instanceId) => {
+        console.log(`🎯 Processing model instance: ${instanceId} (${modelData.name})`);
+        totalImageMaterialsFound += applyTextureToModel(modelData.model, processedMaterials);
+        
+        // Update the stored material count
+        modelData.imageMaterialCount = applyTextureToModel(modelData.model, new Set(), true); // Count only, don't apply
+    });
+    
+    console.log(`✅ Texture application complete: ${totalImageMaterialsFound} image materials processed`);
+    return totalImageMaterialsFound;
+}
+
+function applyTextureToModel(model, processedMaterials, countOnly = false) {
+    let imageMaterialCount = 0;
+    
+    model.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            
+            materials.forEach(material => {
+                if (!processedMaterials.has(material.uuid)) {
+                    processedMaterials.add(material.uuid);
+                    
+                    const matName = material.name || '';
+                    if (matName.toLowerCase().includes('image')) {
+                        if (!countOnly) {
+                            // Add to global registry if not already there
+                            if (!imageMaterials.includes(material)) {
+                                imageMaterials.push(material);
+                            }
+                            
+                            // Apply canvasTexture if available globally
+                            if (window.canvasTexture) {
+                                material.map = window.canvasTexture;
+                            } else if (window.uvTextureEditor) {
+                                const texture = window.uvTextureEditor.getTexture();
+                                if (texture) {
+                                    material.map = texture;
+                                }
+                            }
+                            
+                            // Apply material optimizations
+                            material.transparent = true;
+                            material.alphaTest = 0.001;
+                            material.depthWrite = true;
+                            material.side = THREE.FrontSide;
+                            
+                            // Initialize material properties
+                            if (!material.color) {
+                                material.color = new THREE.Color(1, 1, 1);
+                            }
+                            if (!material.emissive) {
+                                material.emissive = new THREE.Color(0x000000);
+                            }
+                            material.emissiveMap = null;
+                            
+                            material.needsUpdate = true;
+                        }
+                        
+                        imageMaterialCount++;
+                    }
+                }
+            });
+        }
+    });
+    
+    return imageMaterialCount;
+}
+
 // Export multi-model functions
 window.addModelToScene = addModelToScene;
 window.removeModelInstance = removeModelInstance;
@@ -444,6 +606,7 @@ window.getModelInstance = getModelInstance;
 window.getAllModelInstances = getAllModelInstances;
 window.getModelInstanceCount = getModelInstanceCount;
 window.updateSceneStatus = updateSceneStatus;
+window.applyTexturesToAllModels = applyTexturesToAllModels;
 
 // Export the sceneModels Map for direct access when loading saved scenes
 window.sceneModels = sceneModels;
