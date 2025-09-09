@@ -611,7 +611,7 @@ window.applyTexturesToAllModels = applyTexturesToAllModels;
 // Export the sceneModels Map for direct access when loading saved scenes
 window.sceneModels = sceneModels;
 
-// Smooth camera animation functions
+// Smooth camera animation functions with rotation awareness
 function centerCameraOnModel(model, boundingBox, size) {
     if (!window.camera || !window.controls) {
         console.warn('Camera or controls not available for centering');
@@ -622,28 +622,51 @@ function centerCameraOnModel(model, boundingBox, size) {
     const center = boundingBox.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
     
+    // Get model's rotation to position camera optimally
+    const modelRotation = model.rotation.y; // Y-axis rotation is most common
+    
     let distance;
     let newPosition;
     
     if (window.camera.isPerspectiveCamera) {
         // Perspective camera: calculate distance based on FOV
         const fov = window.camera.fov * (Math.PI / 180); // Convert to radians
-        distance = maxDim / (2 * Math.tan(fov / 2)) * 1.1; // 1.1 factor for ~75% coverage
+        distance = maxDim / (2 * Math.tan(fov / 2)) * 1.2; // 1.2 factor for ~70% coverage
         
-        // Position camera in front of the model (negative Z relative to model center)
-        newPosition = new THREE.Vector3(center.x, center.y, center.z + distance);
+        // Calculate rotation-aware camera position
+        // Position camera in front of where the model is facing
+        const cameraAngle = modelRotation; // Same angle as model to be in front of where it's facing
+        const heightOffset = maxDim * 0.2; // Slight elevation for better perspective
+        
+        newPosition = new THREE.Vector3(
+            center.x + Math.sin(cameraAngle) * distance,
+            center.y + heightOffset,
+            center.z + Math.cos(cameraAngle) * distance
+        );
+        
+        console.log('🎯 Rotation-aware camera positioning:', {
+            modelRotation: (modelRotation * 180 / Math.PI).toFixed(1) + '°',
+            cameraAngle: (cameraAngle * 180 / Math.PI).toFixed(1) + '°',
+            distance: distance.toFixed(2)
+        });
+        
     } else {
-        // Orthographic camera: adjust zoom/view size instead of distance
-        // For orthographic, we'll maintain current distance but adjust the view
+        // Orthographic camera: similar rotation-aware positioning
         const currentDistance = window.camera.position.distanceTo(center);
-        distance = Math.max(currentDistance, maxDim * 1.5); // Ensure reasonable distance
+        distance = Math.max(currentDistance, maxDim * 1.5);
         
-        // Position camera in front of the model
-        newPosition = new THREE.Vector3(center.x, center.y, center.z + distance);
+        const cameraAngle = modelRotation; // Same angle as model to be in front of where it's facing
+        const heightOffset = maxDim * 0.2;
+        
+        newPosition = new THREE.Vector3(
+            center.x + Math.sin(cameraAngle) * distance,
+            center.y + heightOffset,
+            center.z + Math.cos(cameraAngle) * distance
+        );
         
         // Adjust orthographic camera view size to fit the model
         const aspect = window.innerWidth / window.innerHeight;
-        const viewSize = maxDim * 0.75; // Show ~75% of model bounds
+        const viewSize = maxDim * 0.7; // Show ~70% of model bounds
         
         window.camera.left = -viewSize * aspect;
         window.camera.right = viewSize * aspect;
@@ -651,8 +674,9 @@ function centerCameraOnModel(model, boundingBox, size) {
         window.camera.bottom = -viewSize;
         window.camera.updateProjectionMatrix();
         
-        console.log('📐 Adjusted orthographic camera view size for model:', {
-            modelSize: maxDim,
+        console.log('📐 Rotation-aware orthographic positioning:', {
+            modelRotation: (modelRotation * 180 / Math.PI).toFixed(1) + '°',
+            cameraAngle: (cameraAngle * 180 / Math.PI).toFixed(1) + '°',
             viewSize: viewSize,
             cameraType: 'orthographic'
         });
@@ -701,11 +725,31 @@ function setupModelDoubleClickHandler() {
     if (!window.renderer || !window.renderer.domElement) return;
     
     window.renderer.domElement.addEventListener('dblclick', (event) => {
-        if (currentModel) {
-            // Calculate bounding box for current model
-            const box = new THREE.Box3().setFromObject(currentModel);
+        // First try to center on selected object from optimized selection system
+        let targetModel = null;
+        
+        if (window.optimizedSelectionSystem && window.optimizedSelectionSystem.primarySelection) {
+            targetModel = window.optimizedSelectionSystem.primarySelection;
+        } else if (currentModel) {
+            // Fallback to currentModel for backwards compatibility
+            targetModel = currentModel;
+        }
+        
+        if (targetModel) {
+            // Calculate bounding box for target model
+            const box = new THREE.Box3().setFromObject(targetModel);
             const size = box.getSize(new THREE.Vector3());
-            centerCameraOnModel(currentModel, box, size);
+            centerCameraOnModel(targetModel, box, size);
+            
+            console.log('🎯 Double-click centering on:', targetModel.name || 'model', {
+                boundingBox: {
+                    min: box.min,
+                    max: box.max,
+                    size: size
+                }
+            });
+        } else {
+            console.log('🎯 Double-click: No model to center on');
         }
     });
 }
